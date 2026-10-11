@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>管理员登录 · 权益U赏</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+     font-family:arial,"PingFang SC","Microsoft YaHei",sans-serif;
+     background:linear-gradient(160deg,#0f172a,#1e293b);color:#0f172a}
+.box{background:#fff;border-radius:14px;padding:30px 28px;width:330px;max-width:90vw;
+     box-shadow:0 16px 44px rgba(0,0,0,.28)}
+h1{font-size:17px;margin:0 0 6px}
+.sub{font-size:12.5px;color:#64748b;margin-bottom:18px;line-height:1.65}
+label{display:block;font-size:12.5px;color:#475569;margin-bottom:6px}
+input{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;
+      font-size:14px;outline:none}
+input:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+button{width:100%;margin-top:14px;padding:11px;background:#1e3a8a;color:#fff;
+       border:0;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600}
+button:hover{background:#1d4ed8}
+.err{color:#b91c1c;font-size:12.5px;margin-top:10px;min-height:18px;text-align:center}
+.tip{margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0;
+     font-size:11.5px;color:#94a3b8;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>管理员登录</h1>
+  <div class="sub">这是部署在云端的实例，管理界面需要密码才能进入。<br>
+    （分享给朋友的 <code>/union/</code> 链接免密，不受影响）</div>
+  <form id="f">
+    <label>管理员密码</label>
+    <input type="password" id="pwd" autocomplete="current-password" autofocus>
+    <button type="submit">登录</button>
+  </form>
+  <div class="err" id="err"></div>
+  <div class="tip">
+    密码来自环境变量 <code>UBRP_ADMIN_PASSWORD</code>。<br>
+    忘记的话去 Render 控制台查看或重设。
+  </div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+$("#f").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const err = $("#err");
+  err.textContent = "";
+  try{
+    const r = await fetch("/api/login", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({password: $("#pwd").value})
+    });
+    const d = await r.json();
+    if(d.ok && d.token){
+      localStorage.setItem("ubrpAdminToken", d.token);
+      location.href = "/";
+    }else{
+      err.textContent = d.err || "登录失败";
+    }
+  }catch(e){ err.textContent = "网络错误：" + e.message; }
+});
+</script>
+</body>
+</html>

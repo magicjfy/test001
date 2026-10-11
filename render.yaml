@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: ubrp-manager
+    runtime: python
+    plan: free
+    buildCommand: ""
+    startCommand: python app.py
+    envVars:
+      - key: UBRP_CLOUD
+        value: "1"
+      - key: UBRP_PUSH_KEY
+        sync: false          # 部署后在控制台填，不要写进仓库
+      - key: PORT
+        value: "10000"

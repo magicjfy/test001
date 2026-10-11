@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>权益U赏 · 多账号权益管理</title>
+<style>
+  :root{
+    --blue:#1a4b8c; --blue2:#2b6cb0; --teal:#12a19a; --teal-soft:#e6f6f5;
+    --bg:#f5f7fa; --card:#fff; --line:#e6e9ef; --text:#1f2937; --muted:#6b7280;
+    --warn:#c2410c; --ok:#0f766e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font-family:arial,"PingFang SC","Microsoft YaHei","Source Han Sans",sans-serif;font-size:14px}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 18px 60px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px}
+  .card h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  .card h2 .dot{width:6px;height:14px;border-radius:3px;background:var(--blue)}
+  .card h2.clickable{cursor:pointer;user-select:none;justify-content:flex-start}
+  .card h2.clickable:hover{color:var(--blue2)}
+  .toggle{margin-left:auto;font-size:12.5px;font-weight:400;color:var(--blue2);
+       display:flex;align-items:center;gap:4px;white-space:nowrap}
+  .toggle::before{content:"";width:0;height:0;border:4px solid transparent;
+       border-top-color:var(--blue2);border-bottom:0;margin-top:2px;transition:transform .18s}
+  .card.folded .toggle::before{transform:rotate(-90deg)}
+  .card.folded #credBody{display:none}
+  .card.folded{padding-bottom:12px}
+  label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+  input[type=text],textarea,select{width:100%;border:1px solid var(--line);border-radius:8px;
+       padding:9px 11px;font-size:13px;outline:none;font-family:ui-monospace,Menlo,Consolas,monospace}
+  input[type=text]:focus,textarea:focus{border-color:var(--blue2)}
+  textarea{min-height:66px;resize:vertical}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .row>div{flex:1;min-width:200px}
+  button{border:none;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;
+       background:var(--blue);color:#fff;transition:.15s}
+  button:hover{background:var(--blue2)}
+  button.ghost{background:#fff;color:var(--blue);border:1px solid var(--blue)}
+  button.ghost:hover{background:#f0f5fc}
+  button.teal{background:var(--teal)}
+  button.teal:hover{background:#0e8b85}
+  button.mini{padding:5px 10px;font-size:12px;border-radius:6px}
+  button:disabled{background:#c3cad6;cursor:not-allowed}
+  .mt10{margin-top:10px}.mt14{margin-top:14px}
+  details{font-size:12.5px;color:var(--muted);margin-top:10px}
+  details summary{cursor:pointer;color:var(--blue2)}
+  code{background:#f2f4f8;padding:1px 5px;border-radius:4px;font-size:12px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:12.5px;
+       background:#fff;cursor:pointer;display:flex;align-items:center;gap:6px;transition:.15s}
+  .chip:hover{border-color:var(--blue2)}
+  .chip.active{background:var(--teal-soft);border-color:var(--teal);color:var(--ok);font-weight:600}
+  .chip .x{color:#9aa3af;font-weight:700}
+  .chip .x:hover{color:#dc2626}
+  .chip .dotst{width:7px;height:7px;border-radius:50%;background:#c3cad6}
+  .chip .dotst.ok{background:#16a34a}.chip .dotst.bad{background:#dc2626}
+  .userbar{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted);
+       background:var(--teal-soft);border-radius:8px;padding:10px 14px;margin-bottom:14px}
+  .parsebox{margin-top:8px;font-size:12.5px;line-height:1.7}
+  .parsebox .hit{color:var(--ok)}
+  .parsebox .miss{color:#b91c1c}
+  .parsebox .note{color:var(--muted)}
+  .parsebox .warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e;
+       border-radius:6px;padding:6px 9px;margin-top:5px;white-space:normal}
+  .parsebox .src{color:#9aa3af;font-size:11.5px}
+  .chip .rn{color:#9aa3af;font-size:12px;padding:0 2px}
+  .chip .rn:hover{color:var(--teal)}
+  .sharelink{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;background:#f8fafc;
+       border:1px solid var(--line);border-radius:6px;padding:7px 9px;color:#334155;
+       word-break:break-all;text-align:left;max-height:60px;overflow:auto}
+  #sharelan.ok{background:#e6f6f5;border:1px solid #99e6df;color:#0f766e;
+       border-radius:6px;padding:8px 10px;text-align:left;line-height:1.6}
+  #sharelan.warnbox{background:#fffbeb;border:1px solid #fde68a;color:#92400e;
+       border-radius:6px;padding:8px 10px;text-align:left;line-height:1.6}
+  .cfgline{margin-top:10px;padding-top:9px;border-top:1px dashed var(--line);text-align:left}
+  .seg2{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;
+       background:#fff;vertical-align:middle}
+  .seg2 button{border-radius:0;background:#fff;color:var(--muted);padding:4px 10px;font-size:12px}
+  .seg2 button.on{background:var(--blue);color:#fff}
+  .sharecol{min-width:230px}
+  #linkcfg{background:#f8fafc;border:1px solid var(--line);border-radius:8px;
+       padding:9px 11px;margin-bottom:12px;line-height:2}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;
+       background:#fff;vertical-align:middle}
+  .seg button{border-radius:0;background:#fff;color:var(--muted);padding:5px 12px;font-size:12.5px}
+  .seg button.on{background:var(--blue);color:#fff}
+  button.gen{background:#1a4b8c;color:#fff}
+  button.gen:hover{background:#2b6cb0}
+  button.stop{background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0}
+  button.stop:hover{background:#e2e8f0;color:#334155}
+  .userbar b{color:var(--ok)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;background:#f7f9fc;color:var(--muted);font-weight:600;
+     padding:10px 10px;border-bottom:1px solid var(--line);white-space:nowrap;font-size:12.5px}
+  td{padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tr:hover td{background:#fafcff}
+  .bt{font-weight:600;color:#111827}
+  .small{font-size:12px;color:var(--muted)}
+  .tag{display:inline-block;padding:2px 8px;border-radius:11px;font-size:11.5px;white-space:nowrap}
+  .tag.mer{background:var(--teal-soft);color:var(--ok)}
+  .tag.st{background:#eef2ff;color:#4338ca}
+  .tag.dyn{background:#fff7ed;color:var(--warn)}
+  .tag.stc{background:#f1f5f9;color:#475569}
+  .codebox{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;letter-spacing:.5px;
+       background:#f8fafc;border:1px dashed #cbd5e1;border-radius:6px;padding:5px 8px;display:inline-block}
+  .maskcode{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;letter-spacing:2px;
+       background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:5px 8px;
+       display:inline-block;color:#94a3b8;user-select:none}
+  .bar{height:3px;background:#e5e7eb;border-radius:2px;overflow:hidden;margin-top:5px;width:110px}
+  .bar>i{display:block;height:100%;background:var(--teal);transition:width 1s linear}
+  .ops{display:flex;gap:6px;flex-wrap:wrap}
+  .empty{padding:30px;text-align:center;color:var(--muted)}
+  .err{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px 12px;border-radius:8px;font-size:13px}
+  /* 弹窗 */
+  .mask{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;z-index:50}
+  .mask.show{display:flex}
+  .modal{background:#fff;border-radius:12px;width:440px;max-width:94vw;text-align:center;
+        box-shadow:0 12px 40px rgba(0,0,0,.2);max-height:92vh;
+        display:flex;flex-direction:column;overflow:hidden}
+  .modal-body{padding:20px 22px 6px;overflow-y:auto;flex:1 1 auto}
+  .modal-foot{flex:0 0 auto;padding:12px 22px 18px;border-top:1px solid var(--line);
+              background:#fff;justify-content:center}
+  .qrbox{margin:12px auto;width:240px;height:240px}
+  .qrbox svg{width:240px;height:240px;image-rendering:pixelated}
+  .modal h3{margin:0 0 4px;font-size:15px}
+
+  .tabs{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:8px}
+  .tabs button{border-radius:0;background:#fff;color:var(--muted);padding:6px 14px;font-size:12.5px}
+  .tabs button.on{background:var(--blue);color:#fff}
+  .modal .cd{font-size:12.5px;color:var(--muted);margin-top:6px}
+  .modal .ops{justify-content:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>权益U赏 · 多账号权益管理</h1>
+  <div class="sub">本地运行 · 凭证只存在你自己的电脑 · 一次录入，随时切换查询</div>
+
+  <!-- 凭证（有账号后自动收起，点标题展开） -->
+  <div class="card" id="credCard">
+    <h2 id="credHead" class="clickable">
+      <span class="dot"></span><span id="credTitle">输入银联登录凭证</span>
+      <span class="toggle" id="credToggle"></span>
+    </h2>
+    <div id="credBody">
+    <div class="small" style="margin-bottom:8px">
+      浏览器登录 <code>benefit.unionpayintl.com</code> 后按 F12 打开 Console，执行下面代码，把结果粘贴到输入框：
+    </div>
+    <div style="background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:12px;
+                font-family:ui-monospace,Menlo,Consolas,monospace;color:#334155;overflow-x:auto">
+      JSON.stringify({token: sessionStorage.getItem('tokenUbrpH5'), deviceId: sessionStorage.getItem('deviceId')})
+    </div>
+    <div class="row mt14">
+      <div style="flex:2"><label>凭证（粘上面那行代码的返回结果；也可以直接甩一大段抓包内容进来，会自动摘）</label>
+        <textarea id="cred" placeholder='{"token":"...","deviceId":"..."}  或直接粘贴抓包全文'></textarea>
+        <div id="parseBox" class="parsebox"></div></div>
+      <div style="flex:0 0 180px;min-width:160px"><label>备注名（留空则自动用「邮箱 · 发卡行 · 卡号后4位」）</label>
+        <input type="text" id="accname" placeholder="留空自动命名"></div>
+    </div>
+    <div class="row mt10" style="align-items:center">
+      <div style="flex:0 0 auto"><button id="btnSave">保存并查询</button></div>
+      <div style="flex:0 0 auto"><button class="ghost" id="btnQuery">仅查询（不保存）</button></div>
+      <div style="flex:1"></div>
+    </div>
+    <details>
+      <summary>推送凭证到云端（可选，配合云端部署使用）</summary>
+      <div class="row mt10">
+        <div style="flex:2"><label>云端地址</label>
+          <input type="text" id="cloudUrl" placeholder="https://xxx.onrender.com"></div>
+        <div style="flex:1"><label>推送密钥（与云端 UBRP_PUSH_KEY 一致）</label>
+          <input type="text" id="cloudKey" placeholder="自己起一串"></div>
+      </div>
+      <div class="small" id="cloudStat" style="display:none;margin-top:8px;padding:7px 10px;
+           background:#ecfdf5;border-left:3px solid #0f766e;border-radius:4px"></div>
+      <div class="row mt10" style="align-items:center">
+        <button class="mini" id="btnPushCloud">推送凭证到云端</button>
+        <span class="small" id="pushOut" style="margin-left:8px"></span>
+      </div>
+      <p class="small">把本机的 token / deviceId 推一份到云端的程序实例，这样云端也能取码，
+      <code>/s/xxx</code> 链接就长期有效、你关机也不断。token 过期时再推一次即可。</p>
+    </details>
+    <details>
+      <summary>凭证从哪来 / 多久失效？</summary>
+      <p>token 与 deviceId 存在浏览器 sessionStorage 里，换浏览器、清缓存或超时后就会失效，需要重新拷贝一次。
+      本工具把凭证存在本地 <code>accounts.json</code>，之后切换账号即可直接查，不用再开手机浏览器登录。</p>
+    </details>
+    </div>
+  </div>
+
+  <!-- 账号 -->
+  <div class="card" id="accCard">
+    <h2><span class="dot"></span>已保存账号 <span class="small" style="font-weight:400">（点一下即切换查询）</span></h2>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <!-- 结果 -->
+  <div class="card">
+    <h2><span class="dot"></span>权益列表
+      <span style="margin-left:auto;font-weight:400;font-size:12.5px">
+        <button class="mini ghost" id="btnProbe" style="padding:3px 9px">官方链接探测</button>
+      </span></h2>
+    <div id="userbar"></div>
+    <div id="msg"></div>
+    <div id="diagout" style="display:none"></div>
+    <div id="tableWrap"><div class="empty">还没有查询过，先在上方输入凭证吧</div></div>
+  </div>
+</div>
+
+<!-- 二维码弹窗 -->
+<div class="mask" id="mask">
+  <div class="modal">
+   <div class="modal-body">
+    <h3 id="qrTitle">核销二维码</h3>
+    <div class="small" id="qrSub"></div>
+    <div class="tabs" id="tabs">
+      <button id="tabUrl" class="on">核销链接</button>
+      <button id="tabCode">券码</button>
+    </div>
+    <div class="qrbox" id="qrbox"></div>
+    <div class="bar" id="qrbar" style="width:200px;margin:8px auto 0"><i style="width:100%"></i></div>
+    <div class="cd" id="qrcd"></div>
+    <div class="small" id="qrcode" style="font-family:ui-monospace,Menlo,Consolas,monospace;
+         font-size:14px;letter-spacing:1px;margin-top:8px"></div>
+    <div id="sharebox" style="display:none;margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+      <div class="small" style="margin-bottom:6px">把这条链接发给对方，打开就是一张二维码图（公网可开，不依赖你的电脑）：</div>
+      <div class="sharelink" id="sharelink"></div>
+      <div class="small" id="sharelan" style="display:none;margin-top:8px"></div>
+      <details style="margin-top:9px;text-align:left">
+        <summary class="small" style="cursor:pointer;color:var(--muted)">链接方式 / 高级设置</summary>
+        <div class="cfgline" style="margin-top:8px">
+          <span class="seg2" id="qrseg">
+            <button data-m="hosted">自建页（有标题）</button>
+            <button data-m="qrserver">qrserver（快）</button>
+          </span>
+          <span id="hostwrap" style="display:none">
+            <input type="text" id="hostbase" placeholder="https://xxx.maozi.io（托管给你的地址）"
+                   style="width:250px;display:inline-block;vertical-align:middle;margin-top:6px">
+            <button class="mini" id="btnHostSave">保存</button>
+            <button class="mini ghost" id="btnHostTest">测试</button>
+            <div class="small" id="hosttest" style="margin-top:5px"></div>
+          </span>
+          <span id="apiwrap" style="display:none;margin-top:6px">
+            <span class="small">出图服务：</span>
+            <select id="apisel" style="width:220px;display:inline-block;vertical-align:middle"></select>
+          </span>
+        </div>
+      </details>
+    </div>
+   </div>
+   <div class="ops modal-foot">
+      <button class="teal" id="btnOpen">打开链接</button>
+      <button class="ghost" id="btnCopy">复制</button>
+      <button class="ghost" id="btnStop" style="display:none;color:#b91c1c;border-color:#fecaca">停止</button>
+      <button class="ghost" id="btnClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let accounts = [], activeId = "", curCred = null, curList = [], shares = {};
+let qr = { kind:"", i:0, couponId:null, text:"" };
+
+/* 云端模式下管理接口需要管理员 token；拿到后带上，失效了跳登录页 */
+function adminHeaders(){
+  const t = localStorage.getItem("ubrpAdminToken");
+  return t ? {"X-Admin-Token": t} : {};
+}
+const api = async (url, opt={}) => {
+  let r;
+  try{
+    r = await fetch(url, {headers:{"Content-Type":"application/json",
+                                    ...adminHeaders()}, ...opt});
+  }catch(e){
+    throw new Error("连不上本地服务（" + e.message + "）。请确认 app.py 还在运行。");
+  }
+  const txt = await r.text().catch(()=> "");
+  if(r.status === 401){
+    // 云端未登录 / 会话过期 → 去登录页
+    location.href = "/login";
+    throw new Error("需要管理员登录");
+  }
+  if(!r.ok){
+    let msg = txt.slice(0, 300);
+    try{ const j = JSON.parse(txt); msg = j.err || j.msg || msg; }catch(_){}
+    throw new Error("服务返回 " + r.status + "：" + msg);
+  }
+  try{ return JSON.parse(txt); }
+  catch(e){ throw new Error("返回内容不是 JSON：" + txt.slice(0,200)); }
+};
+
+/* ---------- 凭证智能识别：交给后端做，粘什么都能摘 ---------- */
+let lastParsed = null;
+const msk = s => !s ? "" : (s.length<=8 ? s : s.slice(0,4)+"…"+s.slice(-4));
+
+function renderParse(r){
+  const box = $("#parseBox");
+  if(!r){ box.innerHTML=""; lastParsed=null; return; }
+  lastParsed = r;
+  let h = "";
+  h += r.token
+    ? `<div class="hit">✓ token　<code>${msk(r.token)}</code> <span class="src">← ${r.tokenFrom}</span></div>`
+    : `<div class="miss">✗ 没找到 token</div>`;
+  h += r.deviceId
+    ? `<div class="hit">✓ deviceId　<code>${msk(r.deviceId)}</code> <span class="src">← ${r.deviceFrom}</span></div>`
+    : `<div class="miss">✗ 没找到 deviceId</div>`;
+  (r.notes||[]).forEach(n=> h += `<div class="note">· ${n}</div>`);
+  (r.warns||[]).forEach(w=> h += `<div class="warn">${w}</div>`);
+  box.innerHTML = h;
+}
+
+let pTimer = null;
+$("#cred").addEventListener("input", ()=>{
+  clearTimeout(pTimer);
+  const raw = $("#cred").value.trim();
+  if(!raw){ renderParse(null); return; }
+  pTimer = setTimeout(async ()=>{
+    renderParse(await api("/api/parse-cred", {method:"POST", body:JSON.stringify({raw})}));
+  }, 250);
+});
+
+async function parseNow(){
+  const raw = $("#cred").value.trim();
+  if(!raw){ renderParse(null); return null; }
+  const r = await api("/api/parse-cred", {method:"POST", body:JSON.stringify({raw})});
+  renderParse(r);
+  return r;
+}
+
+/* ---------- 账号 ---------- */
+async function loadAccounts(){
+  const r = await api("/api/accounts");
+  accounts = r.accounts||[]; activeId = r.activeId||"";
+  renderChips();
+  syncFold();
+}
+
+/* ---------- 凭证区折叠：有账号就收起，没有就展开 ---------- */
+let foldForced = false;   // 用户手动点过之后，就别再自动改了
+function setFold(folded){
+  $("#credCard").classList.toggle("folded", folded);
+  $("#credToggle").textContent = folded ? "＋ 添加账号" : "收起";
+  $("#credTitle").textContent =
+    (folded && accounts.length) ? ("已保存 " + accounts.length + " 个账号")
+                                : "输入银联登录凭证";
+}
+function syncFold(){
+  if(foldForced) return;
+  setFold(accounts.length > 0);
+}
+$("#credHead").addEventListener("click", ()=>{
+  const folded = $("#credCard").classList.contains("folded");
+  foldForced = true;               // 手动点过之后尊重用户的选择
+  setFold(!folded);
+  if(folded){ $("#cred").focus(); renderParse(null); }
+});
+function renderChips(){
+  const box = $("#chips");
+  if(!accounts.length){ box.innerHTML = '<span class="small">还没有保存任何账号</span>'; return; }
+  box.innerHTML = accounts.map(a=>{
+    const st = a.lastOk===true ? "ok" : (a.lastOk===false ? "bad" : "");
+    const tip = a.autoName ? `自动名：${a.autoName}` : (a.lastEmail || "还没取到账号信息，点 ↻ 试试");
+    return `<div class="chip ${a.id===activeId?'active':''}" data-id="${a.id}" title="${tip}">
+      <span class="dotst ${st}"></span><span data-act="q">${a.name||"未命名"}</span>
+      <span class="rn" data-act="r" title="重新联网获取名称">↻</span>
+      <span class="x" data-act="d" title="删除">×</span></div>`;
+  }).join("");
+  box.querySelectorAll(".chip").forEach(c=>{
+    c.addEventListener("click", ev=>{
+      const act = ev.target.dataset.act;
+      if(act==="d"){ if(confirm("删除这个账号的凭证？")) delAccount(c.dataset.id); }
+      else if(act==="r"){ autoName(c.dataset.id); }
+      else queryAccount(c.dataset.id);
+    });
+  });
+}
+async function autoName(id){
+  const r = await api("/api/accounts/"+id+"/autoname", {method:"POST", body:JSON.stringify({})});
+  if(!r.ok){ alert("没能取到账号信息："+(r.err||"")+"\n\n多半是 token 失效了，重新拷一份凭证覆盖保存即可。"); return; }
+  accounts = r.accounts||[]; renderChips();
+}
+async function delAccount(id){
+  const r = await api("/api/accounts/"+id, {method:"DELETE"});
+  accounts = r.accounts||[]; activeId = r.activeId||""; renderChips();
+  if(!accounts.length) foldForced = false;   // 删光了就把录入区还回来
+  syncFold();
+}
+
+/* ---------- 查询 ---------- */
+let tickTimer = null;
+function startLoadingTip(){
+  const t0 = Date.now();
+  clearInterval(tickTimer);
+  const paint = ()=>{
+    const s = Math.round((Date.now()-t0)/1000);
+    const el = $("#loadtip"); if(el) el.textContent = `已用 ${s} 秒（要逐个查券码，通常几秒内完成）`;
+  };
+  paint(); tickTimer = setInterval(paint, 1000);
+}
+function stopLoadingTip(){ clearInterval(tickTimer); }
+function showErr(e){
+  stopLoadingTip();
+  const d = (e && (e.stack || e.message)) || String(e);
+  $("#msg").innerHTML = `<div class="err"><b>拉取失败</b><br>${d}<br><br>
+    <button class="mini" id="btnDiag" style="margin-top:4px">一键自检</button>
+    <span class="small">（会逐步测试每个接口，告诉我哪一步挂了）</span></div>`;
+  $("#btnDiag").onclick = runDiag;
+  $("#tableWrap").innerHTML = '<div class="empty">—</div>';
+}
+async function runDiag(){
+  const out = $("#diagout");
+  out.style.display = ""; out.innerHTML = '<div class="small">自检中…</div>';
+  try{
+    const r = await api("/api/diag", {method:"POST", body:JSON.stringify(curCred||{})});
+    if(!r.ok){ out.innerHTML = `<div class="err">${r.err||"自检失败"}</div>`; return; }
+    out.innerHTML = `<div class="small" style="text-align:left;line-height:1.9">
+      <b>自检结果</b>（把这段发给我就能定位）：<br>
+      账号：${r.email||"—"}　权益数：${r.count}<br>` +
+      (r.steps||[]).map(s=>{
+        const c = s.ok ? "#0f766e" : "#b91c1c";
+        return `<span style="color:${c}">${s.ok?"✓":"✗"}</span> ${s.step}
+                <span style="color:#9aa3af">— ${s.ms}ms ${s.code} ${s.msg||""}</span>`;
+      }).join("<br>") + `</div>`;
+  }catch(e){
+    out.innerHTML = `<div class="err">自检也失败了：${e.message}</div>`;
+  }
+}
+
+async function queryAccount(id){
+  activeId = id; renderChips();
+  $("#msg").innerHTML = '<div class="small">正在拉取权益… <span id="loadtip"></span></div>';
+  $("#tableWrap").innerHTML = '<div class="empty">加载中…</div>';
+  $("#userbar").innerHTML = "";
+  stopAllPolling();
+  startLoadingTip();
+  try{
+    const r = await api("/api/benefits", {method:"POST", body:JSON.stringify({accountId:id})});
+    afterQuery(r);
+  }catch(e){ showErr(e); }
+}
+async function queryTemp(cred){
+  $("#msg").innerHTML = '<div class="small">正在拉取权益… <span id="loadtip"></span></div>';
+  $("#tableWrap").innerHTML = '<div class="empty">加载中…</div>';
+  stopAllPolling();
+  startLoadingTip();
+  try{
+    const r = await api("/api/benefits", {method:"POST", body:JSON.stringify(cred)});
+    afterQuery(r);
+  }catch(e){ showErr(e); }
+}
+function afterQuery(r){
+  stopLoadingTip();
+  if(!r.ok){
+    const e = r.err||{};
+    $("#msg").innerHTML = `<div class="err">查询失败：${e.code||""} ${e.msg||""}<br>
+      多半是 token 失效了，重新去网站登录后拷一份新凭证即可。</div>`;
+    $("#tableWrap").innerHTML = '<div class="empty">—</div>';
+    loadCfg();
+loadAccounts(); return;
+  }
+  if(r.accountId) curCred = {accountId:r.accountId};
+  $("#msg").innerHTML = "";
+  const u = r.user||{};
+  if(u.email){
+    $("#userbar").innerHTML = `<div class="userbar">
+      <div>账号：<b>${u.email}</b></div>
+      <div>绑定卡片：<b>${u.cardCount??0}</b> 张</div>
+      <div>待使用权益：<b>${u.pendingUseCount??0}</b> 个</div>
+      <div>本次列出：<b>${r.list.length}</b> 个</div></div>`;
+  }
+  curList = r.list||[];
+  // 换了账号，之前启用的核销链接就没意义了
+  shares = {};
+  stopAllPolling();
+  renderTable();
+}
+function renderTable(){
+  if(!curList.length){ $("#tableWrap").innerHTML = '<div class="empty">当前没有待使用的权益</div>'; return; }
+  const rows = curList.map((b,i)=>{
+    const dyn = b.codeType==="dynamic";
+    const on  = shares[b.couponId];         // 已生成过链接？
+
+    // ---- 券码列 ----
+    // 动态码不在列表里露明文（它 60 秒就换，显示出来也没意义），只标类型；
+    // 点「生成链接」后在二维码页才展示当前这一分钟的码。
+    let codeHtml;
+    if(!b.code){
+      codeHtml = `<span class="small">不可生成</span>`;
+    }else if(dyn){
+      codeHtml = `<div class="maskcode">••••••••••••</div>
+        <div class="small"><span class="tag dyn">动态码</span>
+          ${b.refreshTime ? b.refreshTime+"s 刷新" : ""}</div>`;
+    }else{
+      codeHtml = `<div class="codebox">${b.code}</div>
+        <div class="small"><span class="tag stc">静态码</span>长期有效</div>`;
+    }
+
+    // ---- 分享链接列 ----
+    // 静态码长期有效 → 不上公网 API，本地画二维码即可
+    // 动态码 60 秒就换 → 点「生成链接」才开始持续拼公网链接，点「停用」才结束
+    let shareHtml;
+    if(!dyn){
+      shareHtml = b.qrTarget
+        ? `<div class="ops"><button class="mini gen" data-qr="${i}">二维码</button></div>
+           <div class="small" style="margin-top:5px">本地生成，不联网</div>`
+        : `<span class="small">不可生成</span>`;
+    }else if(!b.code){
+      shareHtml = `<span class="small">不可生成</span>`;
+    }else if(on){
+      shareHtml = `<div class="sharecell">
+          <div class="sharetit"><span style="color:#0f766e">● 监控中 · ${b.refreshTime}s 自动换</span></div>
+          <div class="sharelink" data-cid="${b.couponId}" title="${on.url}">${on.url}</div>
+          <div class="small fetchinfo" data-cid="${b.couponId}">已取码 ${on.fetchCount||0} 次${on.lastFetch?" · 上次 "+on.lastFetch:""}
+            ${on.views?" · 被访问 "+on.views+" 次":""}
+            ${on.deadAt?" · "+new Date(on.deadAt*1000).toLocaleTimeString()+" 自动作废":""}</div>
+        </div>
+        <div class="ops" style="margin-top:7px">
+          <button class="mini ghost" data-view="${i}">二维码</button>
+          <button class="mini ghost" data-copyurl="${i}">复制链接</button>
+          <button class="mini stop" data-stop="${i}">停用</button>
+        </div>`;
+    }else{
+      shareHtml = `<div class="ops">
+          <button class="mini gen" data-start="${i}">生成链接</button></div>
+        <div class="small" style="margin-top:5px">点一下开始取码并持续拼新链接</div>`;
+    }
+
+    const ops = [];
+    if(b.code && !dyn) ops.push(`<button class="mini ghost" data-copy="${i}">复制券码</button>`);
+    if(b.mrchUrl) ops.push(`<button class="mini ghost" data-open="${i}">商户页面</button>`);
+
+    return `<tr>
+      <td><div class="bt">${b.title||b.activityName||"—"}</div>
+          <div class="small">${b.highlight||b.activityName||""}</div></td>
+      <td><span class="tag mer">${b.merchant||"—"}</span>
+          <div class="small">${b.cardNo||""}${b.bankName?" · "+b.bankName:""}</div></td>
+      <td>${b.expireTime||"—"}<div class="small">领券 ${b.receiveTime||"—"}</div></td>
+      <td><span class="tag st">${b.statusText}</span></td>
+      <td>${codeHtml}</td>
+      <td class="sharecol">${shareHtml}</td>
+      <td><div class="ops">${ops.join("")||'<span class="small">—</span>'}</div></td>
+    </tr>`;
+  }).join("");
+  $("#tableWrap").innerHTML = `<table>
+    <thead><tr><th>权益名称</th><th>服务商</th><th>有效期</th><th>状态</th>
+      <th>券码</th><th>分享链接</th><th>操作</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+
+  const bind = (sel, fn)=> $("#tableWrap").querySelectorAll(sel)
+                 .forEach(el=>el.addEventListener("click", ()=>fn(+el.dataset[Object.keys(el.dataset)[0]])));
+  bind("[data-start]",   startShare);
+  bind("[data-view]",    openShare);
+  bind("[data-stop]",    stopShare);
+  bind("[data-qr]",      openStatic);
+  bind("[data-copyurl]", i=>{ const s=shares[curList[i].couponId];
+                              if(s) copy(s.url, $("#tableWrap").querySelector(`[data-copyurl="${i}"]`)); });
+  bind("[data-open]",    i=>{ const u=curList[i].mrchUrl; if(u) window.open(u,"_blank"); });
+  bind("[data-copy]",    i=>copy(curList[i].code, $("#tableWrap").querySelector(`[data-copy="${i}"]`)));
+}
+function copy(text, btn){
+  navigator.clipboard?.writeText(text).then(()=>{
+    const old = btn.textContent; btn.textContent = "已复制"; setTimeout(()=>btn.textContent=old,1200);
+  }).catch(()=>{ const t=document.createElement("textarea"); t.value=text; document.body.appendChild(t);
+    t.select(); document.execCommand("copy"); t.remove(); });
+}
+
+/* ---------- 启用 / 停止：动态码不再一直空转 ---------- */
+async function startShare(i){
+  const b = curList[i];
+  const btn = $("#tableWrap").querySelector(`[data-start="${i}"]`);
+  if(btn){ btn.disabled = true; btn.textContent = "生成中…"; }
+  const r = await api("/api/share/create", {method:"POST", body:JSON.stringify({
+    ...(curCred||{}), couponId:b.couponId, title:b.title, merchant:b.merchant,
+    expireTime:b.expireTime, cardNo:b.cardNo,
+    imgUrl:b.imgUrl||"", orderNo:b.orderNo||"", bankName:b.bankName||""})});
+  if(!r.ok){ alert("生成失败：" + (r.err||"")); renderTable(); return; }
+  shares[b.couponId] = r.share;
+  renderTable();
+  ensureWatch(b.couponId);      // 先起监控，再开弹窗
+  openShare(i);
+  if(r.share.cloudErr) alert(r.share.cloudErr);
+}
+async function stopShare(i){
+  const b = curList[i], s = shares[b.couponId];
+  if(s){ clearInterval(s._timer); await api("/api/share/stop", {method:"POST", body:JSON.stringify({id:s.id})}); }
+  delete shares[b.couponId];
+  renderTable();
+}
+function stopAllPolling(){
+  Object.values(shares).forEach(s=>{ clearInterval(s._timer); s._timer = null; });
+}
+
+/* ---------- 弹窗：动态码（带分享链接） ---------- */
+function openShare(i){
+  const b = curList[i], s = shares[b.couponId];
+  if(!s){ startShare(i); return; }
+  const isOff = s.mode === "official";
+  qr = { kind:"share", i, sid:s.id, couponId:b.couponId };
+  $("#qrTitle").textContent = b.title;
+  $("#qrSub").textContent = isOff
+    ? `${b.merchant||""} · 官方链接，${s.linkExpire ? "有效期至 "+s.linkExpire : "长期有效"}`
+    : `${b.merchant||""} · 动态码 ${b.refreshTime} 秒刷新`;
+  $("#tabs").style.display = "none";
+  $("#btnOpen").textContent = "在浏览器打开";
+  $("#btnOpen").style.display = "";
+  $("#btnCopy").textContent = "复制链接";
+  $("#btnStop").style.display = "";
+  $("#sharebox").style.display = "";
+  $("#sharelink").textContent = s.url;
+
+  const lan = $("#sharelan");
+  lan.style.display = "";
+  lan.className = "small warnbox";
+  const how = cfg.qrMode === "hosted"
+    ? `走<b>自建托管页</b>，有标题、有券码、有倒计时，任何人、任何网络都能打开`
+    : `走<b>免费二维码 API</b>，只出一张二维码图，没有标题和说明`;
+  const ttlDead = s.deadAt ? new Date(s.deadAt*1000).toLocaleTimeString() : "";
+  lan.innerHTML = `这条链接${how}，不依赖你的电脑在线。
+    <div style="margin-top:5px">⚠ 这个码 <b>${b.refreshTime} 秒</b>就换，本页会自动拼出新链接，
+    但<b>已发出去的旧链接不会变</b>，超时后对方扫到的是废码。</div>
+    <div style="margin-top:5px;color:#b91c1c">🔒 谁拿到链接谁就能看最新码 · 已访问 <b>${s.views||0}</b> 次${ttlDead?" · "+ttlDead+" 自动作废":""} · 不用了点「停止」立即失效</div>
+    ${cfg.qrMode === "hosted" ? "" : `<div>⚠ 该 API 只出图，<b>没有标题和说明</b>——建议把券码明文一起发给对方。</div>`}`;
+  $("#mask").classList.add("show");
+  paintShare(s); startShareCd();
+}
+
+function paintShare(s){
+  $("#qrbox").innerHTML = s.svg || '<div class="small">生成中…</div>';
+  $("#qrcode").style.display = s.code ? "" : "none";
+  $("#qrcode").textContent = s.code || "";
+  if(s.url){
+    $("#sharelink").textContent = s.url;          // 弹窗里的链接要跟着换
+    $("#sharelink").title = s.url;
+  }
+  const r = shares[curList[qr.i].couponId];
+  if(r){ r.code = s.code; r.url = s.url || r.url; }
+  // 列表里那一格也要换，否则看起来永远停在第一次那条
+  const cell = document.querySelector('.sharelink[data-cid="' + esc(curList[qr.i].couponId) + '"]');
+  if(cell && s.url) cell.textContent = s.url;
+  const cd = document.querySelector('.fetchinfo[data-cid="' + esc(curList[qr.i].couponId) + '"]');
+  if(cd) cd.textContent = "已取码 " + (s.fetchCount||0) + " 次 · 上次 " + (s.lastFetch||"—");
+}
+/* 监控独立于弹窗：只要没点「停用」就一直跑，关弹窗也不受影响。
+   之前定时器挂在弹窗上，一关就停，列表链接因此永远不更新。 */
+function ensureWatch(cid){
+  const s = shares[cid];
+  if(!s || s._timer) return;
+  if(!s.refreshTime){ return; }
+  let left = Math.max(0, Math.round(s.expireAt - s.now)), total = s.refreshTime;
+  const paintCd = ()=>{
+    if(qr && curList[qr.i] && curList[qr.i].couponId === cid && $("#mask").classList.contains("show")){
+      $("#qrcd").innerHTML = `动态码 <b>${left}</b> 秒后刷新，二维码会自动更新`;
+      const bar = $("#qrbar"); if(bar) bar.style.width = Math.max(0, left/total*100) + "%";
+    }
+  };
+  paintCd();
+  let busy = false;
+  s._timer = setInterval(async ()=>{
+    left--;
+    if(left > 0){ paintCd(); return; }
+    if(busy) return;
+    busy = true;
+    const r = await api("/api/share/" + s.id);
+    if(r.ok){
+      const before = s.url;
+      Object.assign(s, r.share);
+      total = s.refreshTime; left = Math.max(0, Math.round(s.expireAt - s.now));
+      // 更新列表那一格（不整表重绘，避免打断你的操作）
+      const cell = document.querySelector('.sharelink[data-cid="' + esc(cid) + '"]');
+      if(cell && s.url){ cell.textContent = s.url; cell.title = s.url; }
+      const info = document.querySelector('.fetchinfo[data-cid="' + esc(cid) + '"]');
+      if(info) info.textContent = "已取码 " + (s.fetchCount||0) + " 次 · 上次 " + (s.lastFetch||"—");
+      // 弹窗正开着的话，里面的二维码和链接也要换
+      if(qr && curList[qr.i] && curList[qr.i].couponId === cid && $("#mask").classList.contains("show")){
+        $("#qrbox").innerHTML = s.svg || "";
+        $("#qrcode").textContent = s.code || "";
+        $("#sharelink").textContent = s.url || "";
+        paintCd();
+      }
+    }else{
+      if(qr && curList[qr.i] && curList[qr.i].couponId === cid) $("#qrcd").textContent = "刷新失败";
+      clearInterval(s._timer); s._timer = null;
+    }
+    busy = false;
+  }, 1000);
+}
+function startShareCd(){ if(qr) ensureWatch(curList[qr.i].couponId); }
+
+/* ---------- 弹窗：静态码 ---------- */
+/* ---------- 链接方式：自建页 / qrserver（放在弹窗里，主页面保持干净）---------- */
+let cfg = { qrMode:"qrserver", hostedBase:"", qrApi:"qrserver", cloudUrl:"", cloudKey:"" };
+let apiList = {};
+async function loadCfg(){
+  try{ const r = await api("/api/settings",{method:"POST",body:JSON.stringify({})});
+       if(r.ok){ cfg.qrMode = r.settings.qrMode || "qrserver";
+                 cfg.hostedBase = r.settings.hostedBase || "";
+                 cfg.qrApi = r.settings.qrApi || "qrserver";
+                 cfg.cloudUrl = r.settings.cloudUrl || "";
+                 cfg.cloudKey = r.settings.cloudKey || "";
+                 apiList = r.qrApis || {}; } }
+  catch(e){}
+  $("#cloudUrl").value = cfg.cloudUrl; $("#cloudKey").value = cfg.cloudKey;
+  const cs = $("#cloudStat");
+  if(cs){
+    if(cfg.cloudUrl){
+      cs.style.display = "";
+      cs.innerHTML = `已关联云端：<b>${esc(cfg.cloudUrl)}</b><br>
+        <span style="color:#0f766e">现在点「生成链接」会直接给出 ${esc(cfg.cloudUrl)}/union/… 公网链接</span>`;
+    } else { cs.style.display = "none"; }
+  }
+  paintCfg();
+}
+function paintCfg(){
+  $("#qrseg").querySelectorAll("button").forEach(bt=>bt.classList.toggle("on", bt.dataset.m===cfg.qrMode));
+  $("#hostwrap").style.display = cfg.qrMode==="hosted" ? "" : "none";
+  $("#apiwrap").style.display = cfg.qrMode==="qrserver" ? "" : "none";
+  if(cfg.qrMode==="hosted") $("#hostbase").value = cfg.hostedBase || "";
+  const sel = $("#apisel");
+  if(sel){
+    sel.innerHTML = Object.keys(apiList).map(k=>
+      `<option value="${k}"${k===cfg.qrApi?" selected":""}>${apiList[k].name}</option>`).join("");
+    sel.onchange = async ()=>{
+      cfg.qrApi = sel.value;
+      await api("/api/settings",{method:"POST",body:JSON.stringify({qrApi:cfg.qrApi})});
+      await reloadShares(); openShare(qr.i);
+    };
+  }
+}
+$("#qrseg").querySelectorAll("button").forEach(bt=>bt.addEventListener("click", async ()=>{
+  cfg.qrMode = bt.dataset.m; paintCfg();
+  await api("/api/settings",{method:"POST",body:JSON.stringify({qrMode:cfg.qrMode, hostedBase:cfg.hostedBase})});
+  await reloadShares();
+}));
+$("#btnPushCloud").onclick = async ()=>{
+  const out = $("#pushOut");
+  out.style.color = ""; out.textContent = "推送中…";
+  const url = $("#cloudUrl").value.trim(), key = $("#cloudKey").value.trim();
+  if(!url){ out.style.color="#b91c1c"; out.textContent = "先填云端地址"; return; }
+  try{
+    await api("/api/settings",{method:"POST",body:JSON.stringify({cloudUrl:url, cloudKey:key})});
+    const r = await api("/api/pushcloud",{method:"POST",body:JSON.stringify({})});
+    if(r.ok){ out.style.color="#0f766e";
+      out.textContent = "✓ 已推送 " + r.count + " 个账号到 " + url.replace(/^https?:\/\//,""); }
+    else { out.style.color="#b91c1c"; out.textContent = "✗ 推送失败：" + (r.err||"未知"); }
+  }catch(e){ out.style.color="#b91c1c"; out.textContent = "✗ " + e.message; }
+};
+
+$("#btnHostTest").onclick = async ()=>{
+  const box = $("#hosttest");
+  box.style.color = "";
+  box.textContent = "测试中…";
+  const r = await api("/api/hostcheck",{method:"POST",body:JSON.stringify({base:$("#hostbase").value.trim()})});
+  if(r.ok){
+    box.style.color = "#0f766e";
+    box.innerHTML = `✓ 能打开（${r.status}，${r.ms}ms，含二维码编码器=${r.hasEncoder}）`;
+  }else{
+    box.style.color = "#b91c1c";
+    box.innerHTML = `✗ 打不开：${esc(r.err || (r.status + " " + (r.head||"").slice(0,60)))}<br>
+      <span style="color:#92400e">若文件改名成了 index.html，地址里就<b>不要</b>带 /qrshow.html</span>`;
+  }
+};
+$("#btnHostSave").onclick = async ()=>{
+  cfg.hostedBase = $("#hostbase").value.trim();
+  await api("/api/settings",{method:"POST",body:JSON.stringify({qrMode:cfg.qrMode, hostedBase:cfg.hostedBase})});
+  await reloadShares();
+  openShare(qr.i);
+};
+async function reloadShares(){
+  for(const cid of Object.keys(shares)){
+    const s0 = shares[cid];
+    if(s0.mode === "official") continue;
+    const r = await api("/api/share/" + s0.id);
+    if(r.ok) shares[cid].url = r.share.url;
+  }
+  renderTable();
+}
+
+/* ---------- 官方链接探测 ---------- */
+/* 探测结果里会插入对方站点的 HTML 片段，必须转义，否则既可能破坏页面结构
+   （实测就因此找不到「打开新鲜链接」按钮），也可能被执行到。 */
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"]/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+
+/* 用事件委托，不依赖 innerHTML 解析后再 querySelector（更稳） */
+$("#diagout").addEventListener("click", async e=>{
+  if(e.target && e.target.dataset && e.target.dataset.openfresh){
+    const cid = e.target.dataset.openfresh;
+    e.target.textContent = "正在打开…";
+    await api("/api/probe", {method:"POST",
+      body:JSON.stringify({...(curCred||{}), couponId:cid, open:true})});
+    e.target.textContent = "已在新窗口打开，快去看";
+  }
+});
+
+$("#btnProbe").onclick = async ()=>{
+  const dyn = curList.filter(b=>b.codeType==="dynamic" && b.mrchUrl);
+  const box = $("#diagout");
+  box.style.display = "";
+  if(!dyn.length){
+    box.innerHTML = '<div class="small" style="padding:8px">当前列表里没有「官方返回了链接」的动态码权益（高铁悦途官方不给链接），无需探测。</div>';
+    return;
+  }
+  box.innerHTML = '<div class="small" style="padding:8px">探测中…（会拉一次 60 秒内的新鲜链接）</div>';
+  let r;
+  try{
+    r = await api("/api/probe",{method:"POST",body:JSON.stringify({...(curCred||{}), couponId:dyn[0].couponId})});
+  }catch(e){ box.innerHTML = `<div class="err">探测失败：${esc(e.message)}</div>`; return; }
+
+  if(!r || (!r.ok && !r.variants)){
+    box.innerHTML = `<div class="err">${esc((r && r.err) || "探测失败")}</div>`;
+    return;
+  }
+  const rows = (r.variants || []).map(v=>{
+    const c = v.status === 200 ? "#0f766e" : "#b91c1c";
+    return `<div style="margin-top:5px">
+      <span style="color:${c}">${esc(v.status)}</span> <b>${esc(v.name)}</b>
+      <span style="color:#9aa3af">— ${esc(v.ms)}ms ${esc(v.bytes)}B ${esc(v.type)}</span><br>
+      ${(v.pageMarks && v.pageMarks.length)
+         ? `<span style="color:#0f766e">页面特征：${esc(v.pageMarks.join("、"))}</span><br>` : ""}
+      ${v.routed ? `<span style="color:#0f766e">✓ 服务端按这条路径路由了（与域名根返回不同）</span><br>` : ""}
+      ${(v.spaMarks && v.spaMarks.length)
+         ? `<span class="src">SPA 壳：${esc(v.spaMarks.join(","))}</span><br>` : ""}
+      <code style="font-size:11px">${esc((v.head||"").slice(0,90))}</code></div>`;
+  }).join("");
+
+  const rec = r.recommend
+    ? `<div style="margin-top:8px;padding:7px 9px;background:#ecfdf5;border-left:3px solid #0f766e;border-radius:4px">
+         <b style="color:#0f766e">推荐：${esc(r.recommend)}</b><br>${esc(r.recommendWhy || "")}
+       </div>`
+    : `<div style="margin-top:8px;padding:7px 9px;background:#fef2f2;border-left:3px solid #b91c1c;border-radius:4px">
+         ${esc(r.recommendWhy || "没能判断出哪个可用")}
+       </div>`;
+  const micro = r.micro
+    ? `<div style="margin-top:8px;padding:7px 9px;background:#fffbeb;border-left:3px solid #b45309;border-radius:4px">
+         <b style="color:#b45309">⚠ 这是个微前端子应用，独立打开会白屏</b><br>${esc(r.microWhy||"")}
+         <div style="margin-top:4px"><b>${esc(r.advice||"")}</b></div>
+       </div>` : "";
+  const advice = (!r.micro && r.advice)
+    ? `<div style="margin-top:6px;color:#0f766e">${esc(r.advice)}</div>` : "";
+  box.innerHTML = `<div class="small" style="text-align:left;line-height:1.85;padding:8px">
+    <b>探测结果</b>（新鲜链接，码 ${esc(r.code || "—")}）${rows}${rec}${micro}${advice}
+    <div style="margin-top:9px">
+      <button class="mini" data-openfresh="${esc(dyn[0].couponId)}">用浏览器打开新鲜链接（肉眼确认）</button>
+      <div class="small" style="margin-top:4px">最可靠的判据：看它是否渲染出核销二维码。只有 60 秒，点了赶紧看。</div>
+    </div></div>`;
+};
+
+/* ---------- 静态码：本地生成二维码，不联网 ---------- */
+async function openStatic(i){
+  const b = curList[i];
+  qr = { kind:"static", i, couponId:b.couponId };
+  $("#qrTitle").textContent = b.title;
+  $("#qrSub").textContent = `${b.merchant||""} · 静态码，长期有效`;
+  $("#tabs").style.display = "none";
+  $("#btnOpen").textContent = "打开兑换链接";
+  $("#btnOpen").style.display = b.mrchUrl ? "" : "none";
+  $("#btnCopy").textContent = "复制券码";
+  $("#btnStop").style.display = "none";
+  $("#sharebox").style.display = "none";
+  $("#qrcode").style.display = "";
+  $("#qrcode").textContent = b.code || "";
+  $("#qrcd").textContent = "静态码不会过期，本地生成的二维码可以截图";
+  $("#mask").classList.add("show");
+  const r = await api("/api/qrcode", {method:"POST", body:JSON.stringify({text:b.qrTarget, scale:7})});
+  $("#qrbox").innerHTML = r.ok ? r.svg : '<div class="small">生成失败</div>';
+}
+
+/* ---------- 弹窗按钮 ---------- */
+$("#btnOpen").onclick = ()=>{
+  const b = curList[qr.i], s = shares[b?.couponId];
+  if(qr.kind === "static"){
+    if(b && b.mrchUrl) window.open(b.mrchUrl, "_blank");
+  }else if(s && s.url) window.open(s.url, "_blank");
+};
+$("#btnCopy").onclick = ()=>{
+  const b = curList[qr.i], s = shares[b?.couponId];
+  if(qr.kind === "static") copy(b.code, $("#btnCopy"));
+  else if(s && s.url) copy(s.url, $("#btnCopy"));
+};
+$("#btnStop").onclick = async ()=>{ await stopShare(qr.i); closeQr(); };
+$("#btnClose").onclick = closeQr;
+$("#mask").addEventListener("click", e=>{ if(e.target.id==="mask") closeQr(); });
+function closeQr(){
+  $("#mask").classList.remove("show");
+  // 关弹窗【不】停止监控：链接可能正给工作人员扫，要停就点「停止」。
+  // 以前这里会 clearInterval，导致列表里的链接永远停在第一次那条。
+}
+
+/* ---------- 按钮 ---------- */
+$("#btnSave").onclick = async ()=>{
+  const c = await parseNow();
+  if(!c || !c.token || !c.deviceId){
+    alert("没能从这段内容里同时摘出 token 和 deviceId，请看下方红色提示"); return;
+  }
+  if(c.deviceConfidence === "low" &&
+     !confirm("deviceId 是从神策统计 Cookie 里摘的，很可能不是接口真正需要的那个，查询大概率会失败。\n\n仍要保存吗？（建议改成用页面上方那行代码重新取一次）")) return;
+  const r = await api("/api/accounts", {method:"POST", body:JSON.stringify({
+    token:c.token, deviceId:c.deviceId, name:$("#accname").value.trim()})});
+  if(!r.ok){ alert("保存失败："+(r.err||"")); return; }
+  foldForced = false;                 // 保存完自动收起，把位置让给账号和列表
+  $("#cred").value = ""; $("#accname").value = "";
+  await loadCfg();
+loadAccounts();
+  if(!r.autoName){
+    $("#msg").innerHTML = `<div class="err">凭证已保存，但没能联网取到账号信息（${r.autoNameErr||"未知原因"}），
+      备注名暂时用「${r.account.name}」。凭证有效后可点账号标签旁的 ↻ 重新获取。</div>`;
+  }
+  await queryAccount(r.account.id);
+};
+$("#btnQuery").onclick = async ()=>{
+  const c = await parseNow();
+  if(!c || !c.token || !c.deviceId){ alert("没能同时摘出 token 和 deviceId"); return; }
+  curCred = {token:c.token, deviceId:c.deviceId};
+  await queryTemp(curCred);
+};
+
+loadCfg();
+loadAccounts();
+</script>
+</body>
+</html>

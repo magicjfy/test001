@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="referrer" content="no-referrer">
+<title>权益核销</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{background:#f2f4f7;color:#0f172a;
+     font-family:arial,"PingFang SC","Microsoft YaHei",sans-serif;
+     padding-bottom:26px}
+.wrap{max-width:420px;margin:0 auto;padding:14px}
+
+/* ---- 权益卡片 ---- */
+.card{background:#fff;border-radius:14px;overflow:hidden;
+      box-shadow:0 4px 16px rgba(15,23,42,.07);margin-bottom:12px}
+.cover{height:150px;background:linear-gradient(135deg,#1e3a8a,#0ea5e9);position:relative}
+.cover img{width:100%;height:100%;object-fit:cover;display:block}
+.cover .fallback{position:absolute;inset:0;display:flex;align-items:center;
+      justify-content:center;color:#fff;font-size:15px;letter-spacing:2px;
+      background:linear-gradient(135deg,#1e3a8a,#0ea5e9)}
+.cinfo{padding:14px 16px}
+.ctitle{font-size:15.5px;font-weight:600;line-height:1.5;margin-bottom:6px}
+.cmeta{font-size:12.5px;color:#64748b;display:flex;gap:10px;flex-wrap:wrap}
+.tag{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11.5px;
+     background:#e0f2fe;color:#0369a1}
+
+/* ---- 二维码 ---- */
+.qrwrap{padding:20px 16px 16px;text-align:center}
+.qrbox{width:236px;height:236px;margin:0 auto;background:#fff;
+       display:flex;align-items:center;justify-content:center}
+.qrbox svg{width:236px;height:236px;display:block;image-rendering:pixelated}
+.qrbox .ph{color:#94a3b8;font-size:13px}
+.code{margin-top:14px;font-family:ui-monospace,Menlo,Consolas,monospace;
+      font-size:19px;letter-spacing:2px;font-weight:600}
+.bar{height:3px;background:#e2e8f0;border-radius:2px;margin:12px auto 0;
+     width:200px;overflow:hidden}
+.bar i{display:block;height:100%;background:#0ea5e9;width:100%}
+.cd{font-size:12px;color:#64748b;margin-top:7px}
+.ops{display:flex;gap:9px;justify-content:center;margin-top:14px}
+.ops button{padding:8px 20px;border:1px solid #cbd5e1;background:#fff;
+            border-radius:8px;font-size:13px;cursor:pointer;color:#334155}
+.ops button.pri{background:#1e3a8a;color:#fff;border-color:#1e3a8a}
+
+/* ---- 订单信息 ---- */
+.oi{padding:14px 16px}
+.oi h4{margin:0 0 10px;font-size:13px;color:#475569}
+.row{display:flex;justify-content:space-between;font-size:12.5px;
+     padding:6px 0;border-bottom:1px dashed #eef2f7}
+.row:last-child{border-bottom:0}
+.row span:first-child{color:#94a3b8}
+.row span:last-child{color:#334155;font-family:ui-monospace,Menlo,Consolas,monospace}
+
+/* ---- 使用指引 ---- */
+.guide{padding:14px 16px;font-size:12.5px;color:#475569;line-height:1.85}
+.guide h4{margin:0 0 8px;font-size:13px;color:#475569}
+.guide ol{margin:0;padding-left:18px}
+.guide li{margin-bottom:5px}
+.more{display:block;text-align:center;padding:12px;font-size:13px;color:#1d4ed8;
+      text-decoration:none;border-top:1px solid #eef2f7}
+
+/* ---- 提示 ---- */
+.note{margin:12px 2px 0;font-size:11.5px;color:#94a3b8;line-height:1.7;text-align:center}
+.warn{margin:10px 0 0;padding:9px 12px;background:#fffbeb;border-left:3px solid #f59e0b;
+      border-radius:5px;font-size:12px;color:#92400e;line-height:1.7}
+.errbox{padding:26px 18px;text-align:center}
+.errbox .ic{font-size:34px;margin-bottom:8px}
+.errbox h3{margin:0 0 8px;font-size:15px}
+.errbox p{margin:0;font-size:13px;color:#64748b;line-height:1.75}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="errbox" id="loading">
+    <div class="ic">⏳</div><h3>正在获取权益券码</h3><p>请稍候…</p>
+  </div>
+</div>
+
+<script>
+/* ==================== QR 编码器（内联，无外部依赖）==================== */
+/* ---------- GF(256) ---------- */
+var EXP = new Array(512), LOG = new Array(256);
+(function () {
+  var x = 1;
+  for (var i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; }
+  for (var i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+})();
+function gmul(a, b) { if (a === 0 || b === 0) return 0; return EXP[LOG[a] + LOG[b]]; }
+
+/* 生成多项式 ∏(x - α^i) */
+function rsGenPoly(n) {
+  var g = [1];
+  for (var i = 0; i < n; i++) {
+    var ng = new Array(g.length + 1);
+    for (var j = 0; j < ng.length; j++) ng[j] = 0;
+    for (var k = 0; k < g.length; k++) {
+      ng[k] ^= g[k];                    // 乘 x
+      ng[k + 1] ^= gmul(g[k], EXP[i]);  // 乘 α^i
+    }
+    g = ng;
+  }
+  return g;
+}
+function rsEncode(data, n) {
+  var g = rsGenPoly(n), res = data.concat(new Array(n));
+  for (var i = 0; i < res.length; i++) res[i] = res[i] || 0;
+  for (var i = 0; i < data.length; i++) {
+    var coef = res[i];
+    if (coef !== 0) for (var j = 1; j < g.length; j++) res[i + j] ^= gmul(g[j], coef);
+  }
+  return res.slice(data.length);
+}
+
+/* ---------- 版本表（EC level M） ---------- */
+var VINFO = {
+  1:  { total: 26,  ecw: 10, blocks: [[1, 16]] },
+  2:  { total: 44,  ecw: 16, blocks: [[1, 28]] },
+  3:  { total: 70,  ecw: 26, blocks: [[1, 44]] },
+  4:  { total: 100, ecw: 18, blocks: [[2, 32]] },
+  5:  { total: 134, ecw: 24, blocks: [[2, 43]] },
+  6:  { total: 172, ecw: 16, blocks: [[4, 27]] },
+  7:  { total: 196, ecw: 18, blocks: [[4, 31]] },
+  8:  { total: 242, ecw: 22, blocks: [[2, 38], [2, 39]] },
+  9:  { total: 292, ecw: 22, blocks: [[3, 36], [2, 37]] },
+  10: { total: 346, ecw: 26, blocks: [[4, 43], [1, 44]] }
+};
+var VCAP = { 1: 14, 2: 26, 3: 42, 4: 62, 5: 84, 6: 106, 7: 122, 8: 152, 9: 180, 10: 213 };
+var ALIGN = {
+  1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30],
+  6: [6, 34], 7: [6, 22, 38], 8: [6, 24, 42], 9: [6, 26, 46], 10: [6, 28, 50]
+};
+
+/* ---------- 比特流 ---------- */
+function BitBuf() { this.b = []; }
+BitBuf.prototype.put = function (val, len) {
+  for (var i = len - 1; i >= 0; i--) this.b.push((val >> i) & 1);
+};
+BitBuf.prototype.pad = function (n) { for (var i = 0; i < n; i++) this.b.push(0); };
+BitBuf.prototype.toBytes = function () {
+  var out = [];
+  for (var i = 0; i < this.b.length; i += 8) {
+    var v = 0;
+    for (var j = 0; j < 8; j++) v = (v << 1) | (this.b[i + j] || 0);
+    out.push(v);
+  }
+  return out;
+};
+
+function utf8Bytes(str) {
+  var out = [], esc = encodeURIComponent(str), i = 0;
+  while (i < esc.length) {
+    if (esc[i] === '%') { out.push(parseInt(esc.substr(i + 1, 2), 16)); i += 3; }
+    else { out.push(esc.charCodeAt(i)); i++; }
+  }
+  return out;
+}
+
+function pickVersion(nbytes) {
+  for (var v = 1; v <= 10; v++) if (nbytes <= VCAP[v]) return v;
+  return 0;
+}
+
+/* ---------- 组码字 ---------- */
+function buildCodewords(data, version) {
+  var info = VINFO[version], cap = info.total - info.ecw * blockCount(info);
+  var buf = new BitBuf();
+  buf.put(0x4, 4);                                  // byte mode
+  buf.put(data.length, version < 10 ? 8 : 16);     // char count
+  for (var i = 0; i < data.length; i++) buf.put(data[i], 8);
+  var bitsCap = cap * 8;
+  buf.pad(Math.min(4, bitsCap - buf.b.length));
+  while (buf.b.length % 8 !== 0) buf.b.push(0);
+  var bytes = buf.toBytes();
+  var pads = [0xEC, 0x11], p = 0;
+  while (bytes.length < cap) { bytes.push(pads[p % 2]); p++; }
+  return bytes;
+}
+function blockCount(info) {
+  var n = 0;
+  for (var i = 0; i < info.blocks.length; i++) n += info.blocks[i][0];
+  return n;
+}
+
+function interleave(dataBytes, version) {
+  var info = VINFO[version], ecw = info.ecw;
+  var blocks = [], idx = 0;
+  for (var g = 0; g < info.blocks.length; g++) {
+    var cnt = info.blocks[g][0], dlen = info.blocks[g][1];
+    for (var i = 0; i < cnt; i++) {
+      var d = dataBytes.slice(idx, idx + dlen); idx += dlen;
+      blocks.push({ d: d, e: rsEncode(d, ecw) });
+    }
+  }
+  var out = [], maxD = 0;
+  for (var i = 0; i < blocks.length; i++) maxD = Math.max(maxD, blocks[i].d.length);
+  for (var i = 0; i < maxD; i++)
+    for (var b = 0; b < blocks.length; b++) if (i < blocks[b].d.length) out.push(blocks[b].d[i]);
+  for (var i = 0; i < ecw; i++)
+    for (var b = 0; b < blocks.length; b++) out.push(blocks[b].e[i]);
+  return out;
+}
+
+/* ---------- 矩阵 ---------- */
+function newMat(n) {
+  var m = [], r = [];
+  for (var i = 0; i < n; i++) { m.push(new Array(n)); r.push(new Array(n)); }
+  for (var i = 0; i < n; i++) for (var j = 0; j < n; j++) { m[i][j] = 0; r[i][j] = false; }
+  return { m: m, reserved: r, n: n };
+}
+
+function placeFinder(M, r, c) {
+  for (var i = -1; i <= 7; i++) for (var j = -1; j <= 7; j++) {
+    var rr = r + i, cc = c + j;
+    if (rr < 0 || rr >= M.n || cc < 0 || cc >= M.n) continue;
+    var inRing = (i >= 0 && i <= 6 && (j === 0 || j === 6)) || (j >= 0 && j <= 6 && (i === 0 || i === 6));
+    var inCore = (i >= 2 && i <= 4 && j >= 2 && j <= 4);
+    M.m[rr][cc] = (inRing || inCore) ? 1 : 0;
+    M.reserved[rr][cc] = true;
+  }
+}
+
+function placeAlign(M, version) {
+  var coords = ALIGN[version];
+  for (var a = 0; a < coords.length; a++) for (var b = 0; b < coords.length; b++) {
+    var r = coords[a], c = coords[b];
+    if ((r === 6 && c === 6) || (r === 6 && c === M.n - 7) || (r === M.n - 7 && c === 6)) continue;
+    for (var i = -2; i <= 2; i++) for (var j = -2; j <= 2; j++) {
+      var v = (Math.abs(i) === 2 || Math.abs(j) === 2 || (i === 0 && j === 0)) ? 1 : 0;
+      M.m[r + i][c + j] = v; M.reserved[r + i][c + j] = true;
+    }
+  }
+}
+
+function buildMatrix(bits, version, mask) {
+  var n = 17 + 4 * version;
+  var M = newMat(n);
+  placeFinder(M, 0, 0); placeFinder(M, 0, n - 7); placeFinder(M, n - 7, 0);
+  for (var i = 8; i < n - 8; i++) {                     // timing
+    var v = (i % 2 === 0) ? 1 : 0;
+    M.m[6][i] = v; M.reserved[6][i] = true;
+    M.m[i][6] = v; M.reserved[i][6] = true;
+  }
+  placeAlign(M, version);
+  M.m[n - 8][8] = 1; M.reserved[n - 8][8] = true;       // dark module
+  for (var i = 0; i < 9; i++) {                          // format 区预留
+    if (!M.reserved[8][i]) M.reserved[8][i] = true;
+    if (!M.reserved[i][8]) M.reserved[i][8] = true;
+  }
+  for (var i = n - 8; i < n; i++) { M.reserved[8][i] = true; M.reserved[i][8] = true; }
+  if (version >= 7) {
+    for (var i = 0; i < 6; i++) for (var j = n - 11; j < n - 8; j++) M.reserved[i][j] = true;
+    for (var i = n - 11; i < n - 8; i++) for (var j = 0; j < 6; j++) M.reserved[i][j] = true;
+  }
+
+  // 数据放置（之字形，跳过第 6 列）
+  var bitIdx = 0, upward = true;
+  for (var right = n - 1; right >= 1; right -= 2) {
+    var col = right === 6 ? right - 1 : right;           // 跳过 timing 列
+    for (var k = 0; k < n; k++) {
+      var row = upward ? (n - 1 - k) : k;
+      for (var c2 = 0; c2 < 2; c2++) {
+        var cc = col - c2;
+        if (cc < 0) continue;
+        if (!M.reserved[row][cc]) {
+          var bit = bitIdx < bits.length ? bits[bitIdx] : 0;
+          bitIdx++;
+          M.m[row][cc] = maskBit(mask, row, cc) ? (bit ^ 1) : bit;
+        }
+      }
+    }
+    upward = !upward;
+    if (right === 6) right--;
+  }
+
+  // format info（两份拷贝）
+  var fmt = formatBits(mask);
+  for (var i = 0; i < 15; i++) {
+    var b = (fmt >> i) & 1;
+    // 拷贝 1（左上角）：绕着左上角 L 形
+    if (i <= 5) M.m[i][8] = b;
+    else if (i === 6) M.m[7][8] = b;
+    else if (i === 7) M.m[8][8] = b;
+    else if (i === 8) M.m[8][7] = b;
+    else M.m[8][14 - i] = b;
+    // 拷贝 2（右上角横向 + 左下角纵向）
+    if (i < 8) M.m[8][n - 1 - i] = b;
+    else M.m[n - 15 + i][8] = b;
+  }
+  M.m[n - 8][8] = 1;                                // dark module
+
+  // version info
+  if (version >= 7) {
+    var vb = versionBits(version);
+    for (var i = 0; i < 18; i++) {
+      var b = (vb >> i) & 1, r2 = Math.floor(i / 3), c2 = i % 3;
+      M.m[n - 11 + c2][r2] = b;
+      M.m[r2][n - 11 + c2] = b;
+    }
+  }
+  return M.m;
+}
+
+function maskBit(mask, r, c) {
+  switch (mask) {
+    case 0: return (r + c) % 2 === 0;
+    case 1: return r % 2 === 0;
+    case 2: return c % 3 === 0;
+    case 3: return (r + c) % 3 === 0;
+    case 4: return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0;
+    case 5: return (r * c) % 2 + (r * c) % 3 === 0;
+    case 6: return ((r * c) % 2 + (r * c) % 3) % 2 === 0;
+    case 7: return ((r + c) % 2 + (r * c) % 3) % 2 === 0;
+  }
+  return false;
+}
+
+function formatBits(mask) {
+  var data = (0x00 << 3) | mask;           // EC 指示符: M = 00
+  var rem = data;
+  for (var i = 0; i < 10; i++) rem = (rem << 1) ^ (((rem >>> 9) & 1) * 0x537);
+  return ((data << 10) | (rem & 0x3FF)) ^ 0x5412;
+}
+
+function versionBits(version) {
+  var rem = version;
+  for (var i = 0; i < 12; i++) rem = (rem << 1) ^ (((rem >>> 11) & 1) * 0x1F25);
+  return (version << 12) | (rem & 0xFFF);
+}
+
+/* ---------- 惩罚评分 ---------- */
+function penalty(m) {
+  var n = m.length, p = 0, i, j;
+  for (i = 0; i < n; i++) {
+    var run = 1, prevR = m[i][0], prevC = m[0][i];
+    for (j = 1; j < n; j++) {
+      if (m[i][j] === prevR) run++; else { if (run >= 5) p += 3 + (run - 5); run = 1; prevR = m[i][j]; }
+    }
+    if (run >= 5) p += 3 + (run - 5);
+    run = 1;
+    for (j = 1; j < n; j++) {
+      if (m[j][i] === prevC) run++; else { if (run >= 5) p += 3 + (run - 5); run = 1; prevC = m[j][i]; }
+    }
+    if (run >= 5) p += 3 + (run - 5);
+  }
+  for (i = 0; i < n - 1; i++) for (j = 0; j < n - 1; j++) {
+    var v = m[i][j];
+    if (v === m[i][j + 1] && v === m[i + 1][j] && v === m[i + 1][j + 1]) p += 3;
+  }
+  var patA = "10111010000", patB = "00001011101";
+  function scan(line) {
+    var s = line.join(""), c = 0, pos = 0;
+    while ((pos = s.indexOf(patA, pos)) >= 0) { c++; pos++; }
+    pos = 0;
+    while ((pos = s.indexOf(patB, pos)) >= 0) { c++; pos++; }
+    return c * 40;
+  }
+  for (i = 0; i < n; i++) {
+    p += scan(m[i]);
+    var col = []; for (j = 0; j < n; j++) col.push(m[j][i]);
+    p += scan(col);
+  }
+  var dark = 0;
+  for (i = 0; i < n; i++) for (j = 0; j < n; j++) dark += m[i][j];
+  var pct = dark * 100 / (n * n);
+  p += 10 * Math.floor(Math.abs(pct - 50) / 5);
+  return p;
+}
+
+/* ---------- 对外接口 ---------- */
+function makeMatrix(text, forcedVersion, forcedMask) {
+  var data = utf8Bytes(text);
+  var version = forcedVersion || pickVersion(data.length);
+  if (!version) throw new Error("内容太长（最多 213 字节）");
+  var cw = buildCodewords(data, version);
+  var all = interleave(cw, version);
+  var bits = [];
+  for (var i = 0; i < all.length; i++) for (var j = 7; j >= 0; j--) bits.push((all[i] >> j) & 1);
+  if (forcedMask !== undefined && forcedMask !== null) return buildMatrix(bits, version, forcedMask);
+  var best = null, bestP = Infinity;
+  for (var k = 0; k < 8; k++) {
+    var m = buildMatrix(bits, version, k);
+    var pp = penalty(m);
+    if (pp < bestP) { bestP = pp; best = m; }
+  }
+  return best;
+}
+
+function debugBits(text, version) {
+  var data = utf8Bytes(text);
+  var cw = buildCodewords(data, version);
+  var all = interleave(cw, version);
+  var bits = [];
+  for (var i = 0; i < all.length; i++) for (var j = 7; j >= 0; j--) bits.push((all[i] >> j) & 1);
+  return { version: version, codewords: all, bits: bits };
+}
+
+function debugReserved(version) {
+  var n = 17 + 4 * version;
+  var M = newMat(n);
+  placeFinder(M, 0, 0); placeFinder(M, 0, n - 7); placeFinder(M, n - 7, 0);
+  for (var i = 8; i < n - 8; i++) { M.reserved[6][i] = true; M.reserved[i][6] = true; }
+  placeAlign(M, version);
+  M.reserved[n - 8][8] = true;
+  for (var i = 0; i < 9; i++) { M.reserved[8][i] = true; M.reserved[i][8] = true; }
+  for (var i = n - 8; i < n; i++) { M.reserved[8][i] = true; M.reserved[i][8] = true; }
+  var cnt = 0;
+  for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (M.reserved[r][c]) cnt++;
+  return { n: n, reservedCount: cnt, free: n * n - cnt,
+           r7: [9,10,11,12].map(function(c){ return M.reserved[7][c] ? 1 : 0; }),
+           r8: [9,10,11,12].map(function(c){ return M.reserved[8][c] ? 1 : 0; }) };
+}
+
+var QREncoder = { makeMatrix: makeMatrix, penalty: penalty, pickVersion: pickVersion,
+                  buildMatrix: buildMatrix, debugBits: debugBits };
+
+
+
+/* ==================== 双 profile 配置 ==================== */
+var PROFILES = {
+  AIRPORT: {
+    tag: "机场贵宾厅",
+    guide: [
+      "到达机场后，前往龙腾出行贵宾厅服务台",
+      "向工作人员出示下方的二维码或券码",
+      "工作人员扫码完成核销后即可进入贵宾厅",
+      "二维码每 60 秒自动更新，请保持本页面打开"
+    ],
+    moreUrl: "https://benefit.unionpayintl.com/mobile/",
+    moreText: "查看权益详情"
+  },
+  RAIL: {
+    tag: "高铁贵宾厅",
+    guide: [
+      "到达车站后，前往悦途出行贵宾厅服务台",
+      "向工作人员出示下方的二维码或券码",
+      "工作人员扫码完成核销后即可进入贵宾厅",
+      "二维码每 60 秒自动更新，请保持本页面打开"
+    ],
+    moreUrl: "https://m3.yuetuvip.com",
+    moreText: "查询可用贵宾厅网点"
+  },
+  GENERIC: {
+    tag: "权益核销",
+    guide: [
+      "向工作人员出示下方的二维码或券码",
+      "工作人员扫码完成核销即可",
+      "二维码每 60 秒自动更新，请保持本页面打开"
+    ],
+    moreUrl: "https://benefit.unionpayintl.com/mobile/",
+    moreText: "查看权益详情"
+  }
+};
+
+var SID = (function(){
+  var m = location.pathname.match(/\/(?:union|s)\/([A-Za-z0-9_-]{4,64})/);
+  return m ? m[1] : "";
+})();
+
+var state = { share:null, timer:null, cdTimer:null, left:0, retry:0, dead:false };
+
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+function matrixToSvg(m, scale){
+  var n = m.length, b = 4, total = n + b*2, px = total * scale;
+  var out = ['<svg xmlns="http://www.w3.org/2000/svg" width="'+px+'" height="'+px+'" '+
+             'viewBox="0 0 '+total+' '+total+'" shape-rendering="crispEdges">'];
+  out.push('<rect width="'+total+'" height="'+total+'" fill="#fff"/>');
+  for (var y=0; y<n; y++){
+    var run = 0;
+    for (var x=0; x<=n; x++){
+      var on = x<n && m[y][x];
+      if (on) run++;
+      else if (run){ out.push('<rect x="'+(x-run+b)+'" y="'+(y+b)+'" width="'+run+'" height="1" fill="#000"/>'); run=0; }
+    }
+  }
+  out.push('</svg>');
+  return out.join("");
+}
+
+function drawQr(text){
+  var box = document.getElementById("qrbox");
+  if(!box) return;
+  if(!text){ box.innerHTML = '<div class="ph">无券码</div>'; return; }
+  try{
+    box.innerHTML = matrixToSvg(QREncoder.makeMatrix(text), 8);
+  }catch(e){
+    box.innerHTML = '<div class="ph">二维码生成失败</div>';
+  }
+}
+
+function statusText(st){
+  return {1:"待使用", 2:"已使用", 3:"已过期"}[st] || ("状态 " + st);
+}
+
+/* ---------- 终态页 ---------- */
+function showTerm(icon, title, msg){
+  clearTimers();
+  state.dead = true;
+  document.getElementById("app").innerHTML =
+    '<div class="errbox"><div class="ic">'+icon+'</div><h3>'+esc(title)+
+    '</h3><p>'+esc(msg)+'</p></div>' +
+    '<div class="note">状态判定依据抓包数据推断，未实测校准</div>';
+}
+
+function clearTimers(){
+  if(state.timer){ clearInterval(state.timer); state.timer=null; }
+  if(state.cdTimer){ clearInterval(state.cdTimer); state.cdTimer=null; }
+}
+
+/* ---------- 渲染 ---------- */
+function render(s){
+  var p = PROFILES[s.profile] || PROFILES.GENERIC;
+  var cover;
+  if (s.imgUrl){
+    cover = '<div class="cover"><div class="fallback">'+esc(s.title||"权益")+'</div>'+
+            '<img src="'+esc(s.imgUrl)+'" alt="" onerror="this.style.display=\'none\'"></div>';
+  } else {
+    cover = '<div class="cover"><div class="fallback">'+esc(s.title||"权益")+'</div></div>';
+  }
+  var statusRow = s.status ? '<div class="row"><span>状态</span><span>'+
+                  esc(statusText(s.status))+'</span></div>' : '';
+
+  var html = ''
+    + '<div class="card">'
+    +   cover
+    +   '<div class="cinfo">'
+    +     '<div class="ctitle">'+esc(s.title||"权益核销")+'</div>'
+    +     '<div class="cmeta"><span class="tag">'+esc(p.tag)+'</span>'
+    +       (s.merchant ? '<span>'+esc(s.merchant)+'</span>' : '')
+    +       (s.cardNo ? '<span>'+esc(s.cardNo)+'</span>' : '')
+    +       (s.bankName ? '<span>'+esc(s.bankName)+'</span>' : '')
+    +     '</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="card"><div class="qrwrap">'
+    +   '<div class="qrbox" id="qrbox"></div>'
+    +   '<div class="cd" style="margin-top:10px">请贵宾厅工作人员扫描上方二维码核销</div>'
+    +   '<div class="code" id="code">'+esc(s.code||"")+'</div>'
+    +   (s.refreshTime ? '<div class="bar"><i id="bar" style="width:100%"></i></div>'+
+                         '<div class="cd" id="cd"></div>' : '')
+    +   '<div class="ops">'
+    +     '<button id="btnCopy">复制券码</button>'
+    +     '<button id="btnRefresh" class="pri">刷新</button>'
+    +   '</div>'
+    + '</div></div>'
+    + '<div class="card"><div class="oi">'
+    +   '<h4>订单信息</h4>'
+    +   (s.orderNo ? '<div class="row"><span>订单号</span><span>'+esc(s.orderNo)+'</span></div>' : '')
+    +   (s.couponId ? '<div class="row"><span>券码编号</span><span>'+esc(s.couponId)+'</span></div>' : '')
+    +   statusRow
+    +   (s.expireTime ? '<div class="row"><span>有效期至</span><span>'+esc(s.expireTime)+'</span></div>' : '')
+    +   (s.fetchedAt ? '<div class="row"><span>取码时间</span><span>'+esc(s.fetchedAt)+'</span></div>' : '')
+    + '</div>'
+    + '<div class="guide"><h4>使用指引</h4><ol>'
+    +   p.guide.map(function(t){ return '<li>'+esc(t)+'</li>'; }).join("")
+    + '</ol></div>'
+    + '<a class="more" href="'+esc(p.moreUrl)+'" target="_blank" rel="noopener">'
+    +   esc(p.moreText)+' ›</a>'
+    + '</div>'
+    + (s.persistent ? '' : '<div class="warn">云端未配置持久化存储，服务重启后这个链接会失效。</div>')
+    + '<div class="note">二维码每 60 秒自动更新 · 状态判定依据抓包推断，未实测校准</div>';
+
+  var app = document.getElementById("app");
+  var hadFocus = document.activeElement && document.activeElement.id;
+  app.innerHTML = html;
+  drawQr(s.qrTarget || s.code);
+  bindBtns(s);
+  if (s.refreshTime) startCd(s);
+}
+
+function bindBtns(s){
+  var bc = document.getElementById("btnCopy");
+  if (bc) bc.onclick = function(){
+    var t = document.getElementById("code").textContent;
+    if (navigator.clipboard) navigator.clipboard.writeText(t);
+    bc.textContent = "已复制";
+    setTimeout(function(){ bc.textContent = "复制券码"; }, 1500);
+  };
+  var br = document.getElementById("btnRefresh");
+  if (br) br.onclick = function(){ fetchNow(true); };
+}
+
+function startCd(s){
+  var left = Math.max(0, Math.round(s.expireAt - s.now));
+  var total = s.refreshTime || 60;
+  var paint = function(){
+    var cd = document.getElementById("cd");
+    var bar = document.getElementById("bar");
+    if (cd) cd.textContent = left + " 秒后自动更新";
+    if (bar) bar.style.width = Math.max(0, left/total*100) + "%";
+  };
+  paint();
+  if (state.cdTimer) clearInterval(state.cdTimer);
+  state.cdTimer = setInterval(function(){
+    left--;
+    if (left <= 0){ paint(); fetchNow(false); return; }
+    paint();
+  }, 1000);
+}
+
+/* ---------- 取数 ---------- */
+async function fetchNow(manual){
+  if (state.dead) return;
+  try{
+    var r = await fetch("/api/share/" + SID, {
+      headers: {"Accept":"application/json"}, cache:"no-store", credentials:"omit"
+    });
+    var d = await r.json();
+    if (!d.ok){
+      var msg = d.err || "";
+      if (/停用|不存在|失效/.test(msg))      showTerm("🛑", "链接已停用", msg);
+      else if (/凭证|过期|重推/.test(msg))  showTerm("🔑", "凭证已过期", msg);
+      else                                   showTerm("⚠️", "获取失败", msg);
+      return;
+    }
+    var s = d.share;
+    if (s.authExpired){
+      showTerm("🔑", "凭证已过期",
+        "这个链接的登录凭证已失效，请让分享人在本机重新推送一次凭证到云端，然后刷新本页。");
+      return;
+    }
+    if (s.status && s.status !== 1){
+      showTerm("✅", "该权益已被使用", "券码编号 " + (s.couponId||"") + " 已核销。");
+      return;
+    }
+    state.retry = 0;
+    var first = !state.share;
+    state.share = s;
+    render(s);
+  }catch(e){
+    // 网络故障：短暂重试，但别无限转圈
+    state.retry++;
+    if (state.retry >= 3){
+      showTerm("📶", "网络异常", "连不上服务，请检查网络后刷新页面重试。");
+    } else {
+      setTimeout(function(){ fetchNow(false); }, 15000);
+    }
+  }
+}
+
+/* ---------- 启动 ---------- */
+if (!SID){
+  showTerm("🔗", "链接不完整", "地址里缺少分享 ID，请向分享人重新索取链接。");
+} else {
+  fetchNow(true);
+  // 回前台立即校准（手机切后台期间倒计时不准）
+  document.addEventListener("visibilitychange", function(){
+    if (!document.hidden && !state.dead) fetchNow(true);
+  });
+}
+</script>
+</body>
+</html>

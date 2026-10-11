@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>权益核销码</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:#f5f7fa;color:#1f2937;
+       font-family:arial,"PingFang SC","Microsoft YaHei",sans-serif;
+       display:flex;align-items:center;justify-content:center;padding:18px}
+  .box{background:#fff;border-radius:14px;padding:24px 20px;width:100%;max-width:400px;
+       text-align:center;box-shadow:0 8px 30px rgba(15,23,42,.08)}
+  .badge{display:inline-block;font-size:12px;color:#0f766e;background:#e6f6f5;
+       padding:3px 10px;border-radius:11px;margin-bottom:10px}
+  .tt{font-size:17px;font-weight:600;line-height:1.45;margin-bottom:4px}
+  .mer{font-size:12.5px;color:#6b7280;margin-bottom:16px}
+  .qr{width:260px;height:260px;margin:0 auto;padding:8px;background:#fff;
+      border:1px solid #eef1f6;border-radius:10px;transition:opacity .3s}
+  .qr svg{width:100%;height:100%;display:block}
+  .qr.dead{opacity:.28;filter:grayscale(1)}
+  .hint{margin-top:14px;font-size:14.5px;font-weight:600;color:#1a4b8c}
+  .sub{font-size:12px;color:#6b7280;margin-top:5px}
+  .bar{height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden;margin:12px auto 0;width:210px}
+  .bar>i{display:block;height:100%;background:#12a19a;transition:width 1s linear}
+  .cd{font-size:12.5px;color:#6b7280;margin-top:7px}
+  .cd b{color:#c2410c;font-size:14px}
+  .code{margin-top:14px;font-family:ui-monospace,Menlo,Consolas,monospace;
+        font-size:19px;letter-spacing:1.5px;font-weight:600;background:#f8fafc;
+        border:1px dashed #cbd5e1;border-radius:8px;padding:10px;word-break:break-all}
+  .code .lbl{display:block;font-size:11px;letter-spacing:0;color:#6b7280;
+             font-family:inherit;font-weight:400;margin-bottom:4px}
+  .dead-tip{margin-top:12px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;
+       border-radius:8px;padding:10px;font-size:13px;line-height:1.6}
+  .err{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:10px;
+       padding:16px;font-size:14px;line-height:1.7;text-align:left}
+  .err b{display:block;margin-bottom:6px}
+  code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="box" id="box"><div style="color:#6b7280;font-size:13px;padding:30px 0">正在生成…</div></div>
+
+<script>
+/* ================= 内联二维码编码器（无外部依赖、不走 CDN） =================
+   byte 模式 / 纠错等级 M / 版本 1~10；已与 Python segno 逐掩码比对通过 */
+/* 极简 QR 编码器（byte 模式，EC level M，version 1~10，无外部依赖）
+   用于 qrshow.html 内联。与 Python segno 逐 mask 比对通过。 */
+
+/* ---------- GF(256) ---------- */
+var EXP = new Array(512), LOG = new Array(256);
+(function () {
+  var x = 1;
+  for (var i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; }
+  for (var i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+})();
+function gmul(a, b) { if (a === 0 || b === 0) return 0; return EXP[LOG[a] + LOG[b]]; }
+
+/* 生成多项式 ∏(x - α^i) */
+function rsGenPoly(n) {
+  var g = [1];
+  for (var i = 0; i < n; i++) {
+    var ng = new Array(g.length + 1);
+    for (var j = 0; j < ng.length; j++) ng[j] = 0;
+    for (var k = 0; k < g.length; k++) {
+      ng[k] ^= g[k];                    // 乘 x
+      ng[k + 1] ^= gmul(g[k], EXP[i]);  // 乘 α^i
+    }
+    g = ng;
+  }
+  return g;
+}
+function rsEncode(data, n) {
+  var g = rsGenPoly(n), res = data.concat(new Array(n));
+  for (var i = 0; i < res.length; i++) res[i] = res[i] || 0;
+  for (var i = 0; i < data.length; i++) {
+    var coef = res[i];
+    if (coef !== 0) for (var j = 1; j < g.length; j++) res[i + j] ^= gmul(g[j], coef);
+  }
+  return res.slice(data.length);
+}
+
+/* ---------- 版本表（EC level M） ---------- */
+var VINFO = {
+  1:  { total: 26,  ecw: 10, blocks: [[1, 16]] },
+  2:  { total: 44,  ecw: 16, blocks: [[1, 28]] },
+  3:  { total: 70,  ecw: 26, blocks: [[1, 44]] },
+  4:  { total: 100, ecw: 18, blocks: [[2, 32]] },
+  5:  { total: 134, ecw: 24, blocks: [[2, 43]] },
+  6:  { total: 172, ecw: 16, blocks: [[4, 27]] },
+  7:  { total: 196, ecw: 18, blocks: [[4, 31]] },
+  8:  { total: 242, ecw: 22, blocks: [[2, 38], [2, 39]] },
+  9:  { total: 292, ecw: 22, blocks: [[3, 36], [2, 37]] },
+  10: { total: 346, ecw: 26, blocks: [[4, 43], [1, 44]] }
+};
+var VCAP = { 1: 14, 2: 26, 3: 42, 4: 62, 5: 84, 6: 106, 7: 122, 8: 152, 9: 180, 10: 213 };
+var ALIGN = {
+  1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30],
+  6: [6, 34], 7: [6, 22, 38], 8: [6, 24, 42], 9: [6, 26, 46], 10: [6, 28, 50]
+};
+
+/* ---------- 比特流 ---------- */
+function BitBuf() { this.b = []; }
+BitBuf.prototype.put = function (val, len) {
+  for (var i = len - 1; i >= 0; i--) this.b.push((val >> i) & 1);
+};
+BitBuf.prototype.pad = function (n) { for (var i = 0; i < n; i++) this.b.push(0); };
+BitBuf.prototype.toBytes = function () {
+  var out = [];
+  for (var i = 0; i < this.b.length; i += 8) {
+    var v = 0;
+    for (var j = 0; j < 8; j++) v = (v << 1) | (this.b[i + j] || 0);
+    out.push(v);
+  }
+  return out;
+};
+
+function utf8Bytes(str) {
+  var out = [], esc = encodeURIComponent(str), i = 0;
+  while (i < esc.length) {
+    if (esc[i] === '%') { out.push(parseInt(esc.substr(i + 1, 2), 16)); i += 3; }
+    else { out.push(esc.charCodeAt(i)); i++; }
+  }
+  return out;
+}
+
+function pickVersion(nbytes) {
+  for (var v = 1; v <= 10; v++) if (nbytes <= VCAP[v]) return v;
+  return 0;
+}
+
+/* ---------- 组码字 ---------- */
+function buildCodewords(data, version) {
+  var info = VINFO[version], cap = info.total - info.ecw * blockCount(info);
+  var buf = new BitBuf();
+  buf.put(0x4, 4);                                  // byte mode
+  buf.put(data.length, version < 10 ? 8 : 16);     // char count
+  for (var i = 0; i < data.length; i++) buf.put(data[i], 8);
+  var bitsCap = cap * 8;
+  buf.pad(Math.min(4, bitsCap - buf.b.length));
+  while (buf.b.length % 8 !== 0) buf.b.push(0);
+  var bytes = buf.toBytes();
+  var pads = [0xEC, 0x11], p = 0;
+  while (bytes.length < cap) { bytes.push(pads[p % 2]); p++; }
+  return bytes;
+}
+function blockCount(info) {
+  var n = 0;
+  for (var i = 0; i < info.blocks.length; i++) n += info.blocks[i][0];
+  return n;
+}
+
+function interleave(dataBytes, version) {
+  var info = VINFO[version], ecw = info.ecw;
+  var blocks = [], idx = 0;
+  for (var g = 0; g < info.blocks.length; g++) {
+    var cnt = info.blocks[g][0], dlen = info.blocks[g][1];
+    for (var i = 0; i < cnt; i++) {
+      var d = dataBytes.slice(idx, idx + dlen); idx += dlen;
+      blocks.push({ d: d, e: rsEncode(d, ecw) });
+    }
+  }
+  var out = [], maxD = 0;
+  for (var i = 0; i < blocks.length; i++) maxD = Math.max(maxD, blocks[i].d.length);
+  for (var i = 0; i < maxD; i++)
+    for (var b = 0; b < blocks.length; b++) if (i < blocks[b].d.length) out.push(blocks[b].d[i]);
+  for (var i = 0; i < ecw; i++)
+    for (var b = 0; b < blocks.length; b++) out.push(blocks[b].e[i]);
+  return out;
+}
+
+/* ---------- 矩阵 ---------- */
+function newMat(n) {
+  var m = [], r = [];
+  for (var i = 0; i < n; i++) { m.push(new Array(n)); r.push(new Array(n)); }
+  for (var i = 0; i < n; i++) for (var j = 0; j < n; j++) { m[i][j] = 0; r[i][j] = false; }
+  return { m: m, reserved: r, n: n };
+}
+
+function placeFinder(M, r, c) {
+  for (var i = -1; i <= 7; i++) for (var j = -1; j <= 7; j++) {
+    var rr = r + i, cc = c + j;
+    if (rr < 0 || rr >= M.n || cc < 0 || cc >= M.n) continue;
+    var inRing = (i >= 0 && i <= 6 && (j === 0 || j === 6)) || (j >= 0 && j <= 6 && (i === 0 || i === 6));
+    var inCore = (i >= 2 && i <= 4 && j >= 2 && j <= 4);
+    M.m[rr][cc] = (inRing || inCore) ? 1 : 0;
+    M.reserved[rr][cc] = true;
+  }
+}
+
+function placeAlign(M, version) {
+  var coords = ALIGN[version];
+  for (var a = 0; a < coords.length; a++) for (var b = 0; b < coords.length; b++) {
+    var r = coords[a], c = coords[b];
+    if ((r === 6 && c === 6) || (r === 6 && c === M.n - 7) || (r === M.n - 7 && c === 6)) continue;
+    for (var i = -2; i <= 2; i++) for (var j = -2; j <= 2; j++) {
+      var v = (Math.abs(i) === 2 || Math.abs(j) === 2 || (i === 0 && j === 0)) ? 1 : 0;
+      M.m[r + i][c + j] = v; M.reserved[r + i][c + j] = true;
+    }
+  }
+}
+
+function buildMatrix(bits, version, mask) {
+  var n = 17 + 4 * version;
+  var M = newMat(n);
+  placeFinder(M, 0, 0); placeFinder(M, 0, n - 7); placeFinder(M, n - 7, 0);
+  for (var i = 8; i < n - 8; i++) {                     // timing
+    var v = (i % 2 === 0) ? 1 : 0;
+    M.m[6][i] = v; M.reserved[6][i] = true;
+    M.m[i][6] = v; M.reserved[i][6] = true;
+  }
+  placeAlign(M, version);
+  M.m[n - 8][8] = 1; M.reserved[n - 8][8] = true;       // dark module
+  for (var i = 0; i < 9; i++) {                          // format 区预留
+    if (!M.reserved[8][i]) M.reserved[8][i] = true;
+    if (!M.reserved[i][8]) M.reserved[i][8] = true;
+  }
+  for (var i = n - 8; i < n; i++) { M.reserved[8][i] = true; M.reserved[i][8] = true; }
+  if (version >= 7) {
+    for (var i = 0; i < 6; i++) for (var j = n - 11; j < n - 8; j++) M.reserved[i][j] = true;
+    for (var i = n - 11; i < n - 8; i++) for (var j = 0; j < 6; j++) M.reserved[i][j] = true;
+  }
+
+  // 数据放置（之字形，跳过第 6 列）
+  var bitIdx = 0, upward = true;
+  for (var right = n - 1; right >= 1; right -= 2) {
+    var col = right === 6 ? right - 1 : right;           // 跳过 timing 列
+    for (var k = 0; k < n; k++) {
+      var row = upward ? (n - 1 - k) : k;
+      for (var c2 = 0; c2 < 2; c2++) {
+        var cc = col - c2;
+        if (cc < 0) continue;
+        if (!M.reserved[row][cc]) {
+          var bit = bitIdx < bits.length ? bits[bitIdx] : 0;
+          bitIdx++;
+          M.m[row][cc] = maskBit(mask, row, cc) ? (bit ^ 1) : bit;
+        }
+      }
+    }
+    upward = !upward;
+    if (right === 6) right--;
+  }
+
+  // format info（两份拷贝）
+  var fmt = formatBits(mask);
+  for (var i = 0; i < 15; i++) {
+    var b = (fmt >> i) & 1;
+    // 拷贝 1（左上角）：绕着左上角 L 形
+    if (i <= 5) M.m[i][8] = b;
+    else if (i === 6) M.m[7][8] = b;
+    else if (i === 7) M.m[8][8] = b;
+    else if (i === 8) M.m[8][7] = b;
+    else M.m[8][14 - i] = b;
+    // 拷贝 2（右上角横向 + 左下角纵向）
+    if (i < 8) M.m[8][n - 1 - i] = b;
+    else M.m[n - 15 + i][8] = b;
+  }
+  M.m[n - 8][8] = 1;                                // dark module
+
+  // version info
+  if (version >= 7) {
+    var vb = versionBits(version);
+    for (var i = 0; i < 18; i++) {
+      var b = (vb >> i) & 1, r2 = Math.floor(i / 3), c2 = i % 3;
+      M.m[n - 11 + c2][r2] = b;
+      M.m[r2][n - 11 + c2] = b;
+    }
+  }
+  return M.m;
+}
+
+function maskBit(mask, r, c) {
+  switch (mask) {
+    case 0: return (r + c) % 2 === 0;
+    case 1: return r % 2 === 0;
+    case 2: return c % 3 === 0;
+    case 3: return (r + c) % 3 === 0;
+    case 4: return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0;
+    case 5: return (r * c) % 2 + (r * c) % 3 === 0;
+    case 6: return ((r * c) % 2 + (r * c) % 3) % 2 === 0;
+    case 7: return ((r + c) % 2 + (r * c) % 3) % 2 === 0;
+  }
+  return false;
+}
+
+function formatBits(mask) {
+  var data = (0x00 << 3) | mask;           // EC 指示符: M = 00
+  var rem = data;
+  for (var i = 0; i < 10; i++) rem = (rem << 1) ^ (((rem >>> 9) & 1) * 0x537);
+  return ((data << 10) | (rem & 0x3FF)) ^ 0x5412;
+}
+
+function versionBits(version) {
+  var rem = version;
+  for (var i = 0; i < 12; i++) rem = (rem << 1) ^ (((rem >>> 11) & 1) * 0x1F25);
+  return (version << 12) | (rem & 0xFFF);
+}
+
+/* ---------- 惩罚评分 ---------- */
+function penalty(m) {
+  var n = m.length, p = 0, i, j;
+  for (i = 0; i < n; i++) {
+    var run = 1, prevR = m[i][0], prevC = m[0][i];
+    for (j = 1; j < n; j++) {
+      if (m[i][j] === prevR) run++; else { if (run >= 5) p += 3 + (run - 5); run = 1; prevR = m[i][j]; }
+    }
+    if (run >= 5) p += 3 + (run - 5);
+    run = 1;
+    for (j = 1; j < n; j++) {
+      if (m[j][i] === prevC) run++; else { if (run >= 5) p += 3 + (run - 5); run = 1; prevC = m[j][i]; }
+    }
+    if (run >= 5) p += 3 + (run - 5);
+  }
+  for (i = 0; i < n - 1; i++) for (j = 0; j < n - 1; j++) {
+    var v = m[i][j];
+    if (v === m[i][j + 1] && v === m[i + 1][j] && v === m[i + 1][j + 1]) p += 3;
+  }
+  var patA = "10111010000", patB = "00001011101";
+  function scan(line) {
+    var s = line.join(""), c = 0, pos = 0;
+    while ((pos = s.indexOf(patA, pos)) >= 0) { c++; pos++; }
+    pos = 0;
+    while ((pos = s.indexOf(patB, pos)) >= 0) { c++; pos++; }
+    return c * 40;
+  }
+  for (i = 0; i < n; i++) {
+    p += scan(m[i]);
+    var col = []; for (j = 0; j < n; j++) col.push(m[j][i]);
+    p += scan(col);
+  }
+  var dark = 0;
+  for (i = 0; i < n; i++) for (j = 0; j < n; j++) dark += m[i][j];
+  var pct = dark * 100 / (n * n);
+  p += 10 * Math.floor(Math.abs(pct - 50) / 5);
+  return p;
+}
+
+/* ---------- 对外接口 ---------- */
+function makeMatrix(text, forcedVersion, forcedMask) {
+  var data = utf8Bytes(text);
+  var version = forcedVersion || pickVersion(data.length);
+  if (!version) throw new Error("内容太长（最多 213 字节）");
+  var cw = buildCodewords(data, version);
+  var all = interleave(cw, version);
+  var bits = [];
+  for (var i = 0; i < all.length; i++) for (var j = 7; j >= 0; j--) bits.push((all[i] >> j) & 1);
+  if (forcedMask !== undefined && forcedMask !== null) return buildMatrix(bits, version, forcedMask);
+  var best = null, bestP = Infinity;
+  for (var k = 0; k < 8; k++) {
+    var m = buildMatrix(bits, version, k);
+    var pp = penalty(m);
+    if (pp < bestP) { bestP = pp; best = m; }
+  }
+  return best;
+}
+
+function debugBits(text, version) {
+  var data = utf8Bytes(text);
+  var cw = buildCodewords(data, version);
+  var all = interleave(cw, version);
+  var bits = [];
+  for (var i = 0; i < all.length; i++) for (var j = 7; j >= 0; j--) bits.push((all[i] >> j) & 1);
+  return { version: version, codewords: all, bits: bits };
+}
+
+function debugReserved(version) {
+  var n = 17 + 4 * version;
+  var M = newMat(n);
+  placeFinder(M, 0, 0); placeFinder(M, 0, n - 7); placeFinder(M, n - 7, 0);
+  for (var i = 8; i < n - 8; i++) { M.reserved[6][i] = true; M.reserved[i][6] = true; }
+  placeAlign(M, version);
+  M.reserved[n - 8][8] = true;
+  for (var i = 0; i < 9; i++) { M.reserved[8][i] = true; M.reserved[i][8] = true; }
+  for (var i = n - 8; i < n; i++) { M.reserved[8][i] = true; M.reserved[i][8] = true; }
+  var cnt = 0;
+  for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (M.reserved[r][c]) cnt++;
+  return { n: n, reservedCount: cnt, free: n * n - cnt,
+           r7: [9,10,11,12].map(function(c){ return M.reserved[7][c] ? 1 : 0; }),
+           r8: [9,10,11,12].map(function(c){ return M.reserved[8][c] ? 1 : 0; }) };
+}
+
+var QREncoder = { makeMatrix: makeMatrix, penalty: penalty, pickVersion: pickVersion,
+                  buildMatrix: buildMatrix, debugBits: debugBits };
+
+/* ================= 渲染 ================= */
+var $ = function(id){ return document.getElementById(id); };
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+function matrixToSvg(m, scale){
+  var n = m.length, pad = 2, total = (n + pad*2) * scale, out = [];
+  out.push('<svg xmlns="http://www.w3.org/2000/svg" width="'+total+'" height="'+total+
+           '" viewBox="0 0 '+total+' '+total+'" shape-rendering="crispEdges">');
+  out.push('<rect width="'+total+'" height="'+total+'" fill="#ffffff"/>');
+  var dark = [];
+  for (var r = 0; r < n; r++) for (var c = 0; c < n; c++)
+    if (m[r][c]) dark.push("M"+((c+pad)*scale)+","+((r+pad)*scale)+"h"+scale+"v"+scale+"h-"+scale+"z");
+  out.push('<path fill="#000000" d="'+dark.join("")+'"/>');
+  out.push('</svg>');
+  return out.join("");
+}
+
+var P = new URLSearchParams((typeof location !== "undefined" && location.search) ? location.search : "");
+
+/* ---- 写死在页内的默认文案（链接里不再传这些，链接因此很短） ---- */
+var DEF_TTL = 60;                              // 动态码默认有效期
+var DEF_TIP = "动态码 60 秒有效，超时请让对方重新生成";
+var DEF_SUB = "权益核销", DEF_TITLE = "贵宾服务";
+/* 按券码前缀自动识别是机场还是高铁；识别不了就用上面的默认文案 */
+var PRESETS = [
+  { p: "UILT", sub: "龙腾出行", title: "中国境内机场贵宾厅" },
+  { p: "UIY",  sub: "悦途出行", title: "中国境内高铁贵宾厅" }
+];
+
+/* ---- URL 参数：只有券码和时间戳是必须的，其余都可缺省 ---- */
+var CODE  = P.get("code")  || P.get("c") || "";
+var TS    = P.get("ts")    || P.get("t") || "";
+var TTL   = parseInt(P.get("ttl") || "", 10) || DEF_TTL;
+
+var MATCH = null;
+for (var i = 0; i < PRESETS.length; i++)
+  if (CODE.toUpperCase().indexOf(PRESETS[i].p) === 0) { MATCH = PRESETS[i]; break; }
+var SUB   = P.get("sub")   || (MATCH ? MATCH.sub   : DEF_SUB);
+var TITLE = P.get("title") || (MATCH ? MATCH.title : DEF_TITLE);
+var TIP   = P.get("tip")   || DEF_TIP;
+
+function parseTs(s){
+  if (!s || s.length !== 14) return null;
+  var y=+s.slice(0,4), mo=+s.slice(4,6)-1, d=+s.slice(6,8),
+      h=+s.slice(8,10), mi=+s.slice(10,12), se=+s.slice(12,14);
+  var t = new Date(y, mo, d, h, mi, se).getTime();
+  return isNaN(t) ? null : t;
+}
+
+function render(){
+  var box = $("box");
+  if (!CODE){
+    box.innerHTML = '<div class="err"><b>缺少券码参数</b>这个链接里没有 <code>code</code> 参数，'+
+      '无法生成二维码。<br><br>请让分享人重新生成链接。</div>';
+    document.title = "链接无效";
+    return;
+  }
+  document.title = TITLE;
+  var svg;
+  try { svg = matrixToSvg(QREncoder.makeMatrix(CODE), 8); }
+  catch(e){ svg = ""; }
+
+  var born = parseTs(TS), ageSec = born ? Math.max(0, (Date.now()-born)/1000) : 0;
+  var left = TTL ? Math.max(0, Math.round(TTL - ageSec)) : 0;
+  var dead = TTL > 0 && left <= 0;
+
+  var h = "";
+  h += '<div class="badge">'+esc(SUB || "权益核销")+'</div>';
+  h += '<div class="tt">'+esc(TITLE)+'</div>';
+  h += '<div class="mer">'+(TTL ? "动态码 · 每 "+TTL+" 秒刷新" : "静态码 · 长期有效")+'</div>';
+  h += '<div class="qr'+(dead?" dead":"")+'" id="qr">'+(svg || '<div style="padding:40px 0;color:#b91c1c">二维码生成失败</div>')+'</div>';
+  if (dead){
+    h += '<div class="dead-tip">这个码可能已经失效了（链接生成于 '+esc(fmt(born))+
+         '，距今 '+Math.round(ageSec)+' 秒）。<br>请让对方<b>重新生成</b>一条链接再发给你。</div>';
+  } else {
+    h += '<div class="hint">请工作人员扫描上方二维码核销</div>';
+    if (TIP) h += '<div class="sub">'+esc(TIP)+'</div>';
+    if (TTL){
+      h += '<div class="bar"><i id="bar" style="width:'+(left/TTL*100)+'%"></i></div>';
+      h += '<div class="cd"><b id="cd">'+left+'</b> 秒后可能失效</div>';
+    }
+  }
+  h += '<div class="code"><span class="lbl">券码（扫不了可人工报号）</span>'+esc(CODE)+'</div>';
+  box.innerHTML = h;
+  if (TTL && !dead) startCd(left);
+}
+
+function fmt(t){
+  if (!t) return "未知";
+  var d = new Date(t), p = function(x){ return (x<10?"0":"")+x; };
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
+}
+
+var tickTimer = null;
+function startCd(left){
+  var total = TTL;
+  clearInterval(tickTimer);
+  function paint(){
+    var el = $("cd"), bar = $("bar");
+    if (el) el.textContent = left;
+    if (bar) bar.style.width = Math.max(0, left/total*100) + "%";
+  }
+  paint();
+  tickTimer = setInterval(function(){
+    left--;
+    if (left > 0){ paint(); return; }
+    clearInterval(tickTimer);
+    render();     // 归零，重画成失效态
+  }, 1000);
+}
+
+// 手机切后台回来重新校准（后台定时器会被暂停）
+if (typeof document !== "undefined" && document.addEventListener)
+  document.addEventListener("visibilitychange", function(){ if (!document.hidden) render(); });
+render();
+</script>
+</body>
+</html>

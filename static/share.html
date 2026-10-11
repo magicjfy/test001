@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>权益核销码</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:#f5f7fa;color:#1f2937;
+       font-family:arial,"PingFang SC","Microsoft YaHei",sans-serif;
+       display:flex;align-items:center;justify-content:center;padding:20px}
+  .box{background:#fff;border-radius:14px;padding:26px 22px;width:100%;max-width:400px;
+       text-align:center;box-shadow:0 8px 30px rgba(15,23,42,.08)}
+  .tt{font-size:16px;font-weight:600;line-height:1.45;margin-bottom:3px}
+  .mer{font-size:12.5px;color:#0f766e;background:#e6f6f5;display:inline-block;
+       padding:3px 10px;border-radius:11px;margin-bottom:16px}
+  .qr{width:270px;height:270px;margin:0 auto;display:flex;align-items:center;justify-content:center;
+      background:#fff;border:1px solid #eef1f6;border-radius:10px;padding:6px}
+  .qr svg{width:100%;height:100%}
+  .hint{margin-top:14px;font-size:14px;font-weight:600;color:#1a4b8c}
+  .sub{font-size:12px;color:#6b7280;margin-top:5px}
+  .bar{height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden;margin:12px auto 0;width:200px}
+  .bar>i{display:block;height:100%;background:#12a19a;transition:width 1s linear}
+  .cd{font-size:12px;color:#6b7280;margin-top:7px}
+  .cd b{color:#c2410c}
+  .code{margin-top:14px;font-family:ui-monospace,Menlo,Consolas,monospace;
+        font-size:20px;letter-spacing:2px;font-weight:600;background:#f8fafc;
+        border:1px dashed #cbd5e1;border-radius:8px;padding:10px;word-break:break-all}
+  .code .lbl{display:block;font-size:11px;letter-spacing:0;color:#6b7280;
+             font-family:inherit;font-weight:400;margin-bottom:4px}
+  .stat{font-size:11.5px;color:#9aa3af;margin-top:12px}
+  .err{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;
+       padding:12px;font-size:13px;line-height:1.6}
+  .loading{color:#6b7280;font-size:13px;padding:40px 0}
+</style>
+</head>
+<body>
+<div class="box" id="box">
+  <div class="loading">正在获取核销码…</div>
+</div>
+
+<script>
+const sid = location.pathname.split("/")[2] || "";
+let left = 0, total = 0, timer = null, busy = false;
+
+function esc(s){ return (s||"").replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+function render(s){
+  const box = document.getElementById("box");
+  if(s.err && !s.code){
+    box.innerHTML = `<div class="err">获取核销码失败：${esc(s.err)}<br><br>
+      请让分享人在管理页面停用后重新启用。</div>`;
+    return;
+  }
+  const dyn = s.refreshTime > 0;
+  box.innerHTML = `
+    <div class="tt">${esc(s.title)}</div>
+    <div class="mer">${esc(s.merchant||"权益核销")}</div>
+    <div class="qr" id="qr">${s.svg||""}</div>
+    <div class="hint">请工作人员扫描上方二维码核销</div>
+    <div class="sub">${dyn ? "动态码会定时刷新，截图无效" : "静态码，长期有效"}
+      ${s.expireTime ? "　·　权益有效期至 " + esc(s.expireTime) : ""}</div>
+    ${dyn ? `<div class="bar"><i id="bar" style="width:100%"></i></div>
+             <div class="cd"><b id="cd">--</b> 秒后自动更新</div>` : ""}
+    <div class="code"><span class="lbl">券码（扫不了可人工报号）</span>${esc(s.code)}</div>
+    <div class="stat">${dyn ? "更新于 " + esc(s.fetchedAt||"") : ""}
+      ${s.cardNo ? "　·　卡号 " + esc(s.cardNo) : ""}</div>`;
+  if(dyn) startCd(s);
+}
+
+function startCd(s){
+  total = s.refreshTime;
+  left = Math.max(0, Math.round(s.expireAt - s.now));
+  clearInterval(timer);
+  paint();
+  timer = setInterval(tick, 1000);
+}
+function paint(){
+  const cd = document.getElementById("cd"), bar = document.getElementById("bar");
+  if(cd) cd.textContent = left;
+  if(bar) bar.style.width = Math.max(0, left/total*100) + "%";
+}
+async function tick(){
+  left--;
+  if(left > 0){ paint(); return; }
+  if(busy) return;
+  busy = true;
+  try{
+    const r = await fetch("/api/share/" + sid, {cache:"no-store"}).then(r=>r.json());
+    if(r.ok){ render(r.share); }
+    else{
+      document.getElementById("box").innerHTML =
+        `<div class="err">${esc(r.err||"链接已失效")}</div>`;
+      clearInterval(timer);
+    }
+  }catch(e){ left = 3; paint(); }
+  busy = false;
+}
+
+async function boot(){
+  try{
+    const r = await fetch("/api/share/" + sid, {cache:"no-store"}).then(r=>r.json());
+    if(!r.ok){
+      document.getElementById("box").innerHTML =
+        `<div class="err">${esc(r.err||"链接已失效")}<br><br>请让分享人在管理页面重新启用。</div>`;
+      return;
+    }
+    render(r.share);
+  }catch(e){
+    document.getElementById("box").innerHTML =
+      `<div class="err">无法连接到服务，请确认管理页面所在电脑仍处于开启状态。</div>`;
+  }
+}
+// 页面回到前台时立刻校准一次（手机切后台会暂停定时器）
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) tick(); });
+boot();
+</script>
+</body>
+</html>
