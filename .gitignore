@@ -3,3 +3,5 @@ settings.json
 __pycache__/
 *.pyc
 UBRP_PUSH_KEY.txt
+README.md
+云端部署与操作指南.md

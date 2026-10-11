@@ -693,6 +693,18 @@ function startShareCd(){ if(qr) ensureWatch(curList[qr.i].couponId); }
 /* ---------- 链接方式：自建页 / qrserver（放在弹窗里，主页面保持干净）---------- */
 let cfg = { qrMode:"qrserver", hostedBase:"", qrApi:"qrserver", cloudUrl:"", cloudKey:"" };
 let apiList = {};
+/* 刷新页面后从服务端恢复分享会话（否则"停止"按钮会消失，
+   看着像自动停了，其实后台还在跑） */
+async function restoreShares(){
+  try{
+    const r = await api("/api/shares");
+    if(!r.ok || !r.shares) return;
+    shares = {};
+    r.shares.forEach(s=>{ shares[s.couponId] = s; });
+    if(curList.length) renderTable();
+  }catch(e){ /* 本地模式老版本没有这个接口，忽略 */ }
+}
+
 async function loadCfg(){
   try{ const r = await api("/api/settings",{method:"POST",body:JSON.stringify({})});
        if(r.ok){ cfg.qrMode = r.settings.qrMode || "qrserver";
@@ -703,6 +715,7 @@ async function loadCfg(){
                  apiList = r.qrApis || {}; } }
   catch(e){}
   $("#cloudUrl").value = cfg.cloudUrl; $("#cloudKey").value = cfg.cloudKey;
+  restoreShares();
   const cs = $("#cloudStat");
   if(cs){
     if(cfg.cloudUrl){

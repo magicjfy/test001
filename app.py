@@ -917,12 +917,21 @@ def host_check(base=""):
 def share_public(s, base=""):
     lan = lan_ip()
     official = s.get("mode") == "official"
+    st = load_settings()
+    cloud = (st.get("cloudUrl") or "").strip().rstrip("/")
     # 只有会变的码才需要拼公网链接；静态码 url 留空，前端走本地二维码
     if s.get("codeType") == "dynamic":
-        st = load_settings()
-        url = hosted_url(s) if st.get("qrMode") == "hosted" else ""
-        if not url:
-            url = qrserver_url(s.get("qrTarget") or s.get("code", ""))
+        # 优先级：已同步到云端 → 用云端 /union/ 链接（公网可开、长期有效）
+        #         自建托管页   → 用托管页
+        #         否则         → qrserver 兜底
+        if s.get("cloudPromoted") and cloud:
+            url = "%s/union/%s" % (cloud, s["id"])
+        elif CLOUD:
+            url = "/union/%s" % s["id"]
+        else:
+            url = hosted_url(s) if st.get("qrMode") == "hosted" else ""
+            if not url:
+                url = qrserver_url(s.get("qrTarget") or s.get("code", ""))
     else:
         url = s.get("mrchUrl") or ""
     return {
@@ -1334,6 +1343,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, "login.html 读取失败: %s" % e, "text/plain; charset=utf-8")
             return
 
+        # 刷新页面后靠它恢复"监控中"状态和停止按钮
+        if path == "/api/shares":
+            base = share_base(self.headers.get("Host") or "")
+            out = []
+            for sid, sh in list(SHARES.items()):
+                try:
+                    out.append(share_public(sh, base))
+                except Exception:
+                    continue
+            self._send(200, {"ok": True, "shares": out})
+            return
+
         if path == "/api/accounts":
             store = load_store()
             self._send(200, {
@@ -1541,9 +1562,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(401, {"ok": False, "err": "密码不对"})
                 return
             tok = new_admin_session()
+            # 注意：headers 必须用关键字传。之前写成第三个位置参数，
+            # 实际被当成 ctype 吃掉了 → Set-Cookie 根本没发出去，
+            # 于是登录后跳回首页又 401 跳回登录页，看起来像"密码对但进不去"。
             self._send(200, {"ok": True, "token": tok},
-                       {"Content-Type": "application/json; charset=utf-8",
-                        "Set-Cookie": "ubrp_admin=%s; Path=/; HttpOnly; SameSite=Lax" % tok})
+                       headers={"Set-Cookie":
+                                "ubrp_admin=%s; Path=/; HttpOnly; SameSite=Lax" % tok})
             return
 
         if path == "/api/logout":
