@@ -511,6 +511,23 @@ function clearTimers(){
 }
 
 /* ---------- 渲染 ---------- */
+/* 指引优先用银联官方 useDirections 原文（shelike 同款来源），
+   拿不到才回退到 profile 里自编的短指引 */
+function guideItems(s, p){
+  if (s.useDirections){
+    var lines = String(s.useDirections).split(/\n+/).map(function(t){return t.trim();})
+                 .filter(Boolean);
+    if (lines.length) return lines;
+  }
+  return p.guide;
+}
+/* 机场的"更多详情"拼活动 ID 直达银联详情页（shelike 同款 URL 格式） */
+function moreLink(s, p){
+  if (s.activityId && s.profile === "AIRPORT")
+    return "https://benefit.unionpayintl.com/mobile/#/benefit/detail/" + s.activityId + "?btnState=disable&lang=zh_CN";
+  return p.moreUrl;
+}
+
 function render(s){
   var p = PROFILES[s.profile] || PROFILES.GENERIC;
   var cover;
@@ -555,9 +572,9 @@ function render(s){
     +   (s.fetchedAt ? '<div class="row"><span>取码时间</span><span>'+esc(s.fetchedAt)+'</span></div>' : '')
     + '</div>'
     + '<div class="guide"><h4>使用指引</h4><ol>'
-    +   p.guide.map(function(t){ return '<li>'+esc(t)+'</li>'; }).join("")
+    +   guideItems(s, p).map(function(t){ return '<li>'+esc(t)+'</li>'; }).join("")
     + '</ol></div>'
-    + '<a class="more" href="'+esc(p.moreUrl)+'" target="_blank" rel="noopener">'
+    + '<a class="more" href="'+esc(moreLink(s, p))+'" target="_blank" rel="noopener">'
     +   esc(p.moreText)+' ›</a>'
     + '</div>'
     + (s.persistent ? '' : '<div class="warn">云端未配置持久化存储，服务重启后这个链接会失效。</div>')

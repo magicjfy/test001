@@ -472,10 +472,15 @@ loadAccounts(); return;
       <div>本次列出：<b>${r.list.length}</b> 个</div></div>`;
   }
   curList = r.list||[];
-  // 换了账号，之前启用的核销链接就没意义了
-  shares = {};
-  stopAllPolling();
+  // 换了账号：只清掉属于旧账号的链接会话，同账号的保留
+  // （之前无条件 shares={}，把刷新后刚恢复的「停止」按钮又抹掉了）
+  const keepCids = new Set(curList.map(b=>b.couponId));
+  Object.keys(shares).forEach(cid=>{
+    if(!keepCids.has(cid)){ clearInterval(shares[cid]._timer); delete shares[cid]; }
+  });
   renderTable();
+  // 恢复服务端还有的会话（刷新场景：curList 刚加载完，现在对得上了）
+  restoreShares();
 }
 function renderTable(){
   if(!curList.length){ $("#tableWrap").innerHTML = '<div class="empty">当前没有待使用的权益</div>'; return; }
@@ -575,7 +580,8 @@ async function startShare(i){
   const r = await api("/api/share/create", {method:"POST", body:JSON.stringify({
     ...(curCred||{}), couponId:b.couponId, title:b.title, merchant:b.merchant,
     expireTime:b.expireTime, cardNo:b.cardNo,
-    imgUrl:b.imgUrl||"", orderNo:b.orderNo||"", bankName:b.bankName||""})});
+    imgUrl:b.imgUrl||"", orderNo:b.orderNo||"", bankName:b.bankName||"",
+    activityId:b.activityId||"", useDirections:b.useDirections||""})});
   if(!r.ok){ alert("生成失败：" + (r.err||"")); renderTable(); return; }
   shares[b.couponId] = r.share;
   renderTable();
@@ -699,10 +705,19 @@ async function restoreShares(){
   try{
     const r = await api("/api/shares");
     if(!r.ok || !r.shares) return;
-    shares = {};
-    r.shares.forEach(s=>{ shares[s.couponId] = s; });
-    if(curList.length) renderTable();
+    // 只补前端没有的，不清已有的（避免把正在监控的定时器抹掉）
+    r.shares.forEach(s=>{
+      if(!shares[s.couponId]) shares[s.couponId] = s;
+    });
+    if(curList.length){ renderTable(); ensureAllWatches(); }
   }catch(e){ /* 本地模式老版本没有这个接口，忽略 */ }
+}
+/* 刷新后把所有恢复出来的动态码会话重新挂上监控定时器 */
+function ensureAllWatches(){
+  Object.keys(shares).forEach(cid=>{
+    const s = shares[cid];
+    if(s && !s._timer && s.refreshTime > 0) ensureWatch(cid);
+  });
 }
 
 async function loadCfg(){

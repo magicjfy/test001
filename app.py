@@ -773,6 +773,7 @@ def share_restore(sid):
          "expireTime": val.get("expireTime", ""), "cardNo": val.get("cardNo", ""),
          "imgUrl": val.get("imgUrl", ""), "orderNo": val.get("orderNo", ""),
          "bankName": val.get("bankName", ""), "profile": val.get("profile", ""),
+         "activityId": val.get("activityId", ""), "useDirections": val.get("useDirections", ""),
          "code": "", "svg": "", "refreshTime": 0, "expireAt": 0,
          "mode": "live", "fetchedAt": "", "err": "", "lastPoll": now,
          "bornAt": val.get("bornAt", now), "views": val.get("views", 0),
@@ -798,6 +799,8 @@ def share_promote(s, cloud, push_key="", acc=None, extra=None):
                     "expireTime": s.get("expireTime", ""), "cardNo": s.get("cardNo", ""),
                     "imgUrl": s.get("imgUrl", ""), "orderNo": s.get("orderNo", ""),
                     "bankName": s.get("bankName", ""), "profile": s.get("profile", ""),
+                    "activityId": s.get("activityId", ""),
+                    "useDirections": s.get("useDirections", ""),
                     "bornAt": s.get("bornAt", time.time()), "views": 0,
                     "status": "active", "updatedAt": time.time()},
         # 凭证一并带过去，否则云端没凭证取码会直接进"凭证已过期"终态
@@ -824,6 +827,7 @@ def share_persist(s):
            "expireTime": s.get("expireTime", ""), "cardNo": s.get("cardNo", ""),
            "imgUrl": s.get("imgUrl", ""), "orderNo": s.get("orderNo", ""),
            "bankName": s.get("bankName", ""), "profile": s.get("profile", ""),
+           "activityId": s.get("activityId", ""), "useDirections": s.get("useDirections", ""),
            "bornAt": s.get("bornAt", time.time()), "views": s.get("views", 0),
            "status": "active", "updatedAt": time.time()}
     return kv_put(s["id"], val)
@@ -927,7 +931,12 @@ def share_public(s, base=""):
         if s.get("cloudPromoted") and cloud:
             url = "%s/union/%s" % (cloud, s["id"])
         elif CLOUD:
-            url = "/union/%s" % s["id"]
+            # 云端自身：请求 Host 就是公网地址，拼完整 URL（否则前端复制到的是半截）
+            host = (base or "").replace("http://", "").replace("https://", "").rstrip("/")
+            if host and "." in host:
+                url = "https://%s/union/%s" % (host, s["id"])
+            else:
+                url = "/union/%s" % s["id"]
         else:
             url = hosted_url(s) if st.get("qrMode") == "hosted" else ""
             if not url:
@@ -936,10 +945,12 @@ def share_public(s, base=""):
         url = s.get("mrchUrl") or ""
     return {
         "id": s["id"], "title": s.get("title", ""), "merchant": s.get("merchant", ""),
+        "couponId": s.get("couponId", ""),
         "fetchCount": s.get("fetchCount", 0), "lastFetch": s.get("lastFetch", ""),
         "views": s.get("views", 0), "authExpired": bool(s.get("authExpired", False)),
         "imgUrl": s.get("imgUrl", ""), "orderNo": s.get("orderNo", ""),
         "bankName": s.get("bankName", ""), "profile": s.get("profile", ""),
+        "activityId": s.get("activityId", ""), "useDirections": s.get("useDirections", ""),
         "persistent": bool(s.get("persistent", kv_enabled())),
         "cloudPromoted": bool(s.get("cloudPromoted", False)),
         "ttl": int(load_settings().get("shareTtl", 0) or 0),
@@ -1756,16 +1767,40 @@ class Handler(BaseHTTPRequestHandler):
             if not token or not dev or not cid:
                 self._send(200, {"ok": False, "err": "参数不全"})
                 return
+            # 幂等：同一张券已有活动会话就直接复用，不生成第二个链接
+            # （否则刷新页面后再点「生成链接」会越积越多，旧链接还没人停）
+            for old in SHARES.values():
+                if (old.get("couponId") == cid and old.get("mode") == "live"
+                        and not old.get("authExpired")):
+                    base = share_base(self.headers.get("Host") or "")
+                    self._send(200, {"ok": True, "share": share_public(old, base),
+                                     "reused": True})
+                    return
             sid = uuid.uuid4().hex[:12]
             s = {"id": sid, "accountId": acc["id"] if acc else None, "bornAt": time.time(),
                  "token": token, "deviceId": dev, "couponId": cid,
                  "title": b.get("title", ""), "merchant": b.get("merchant", ""),
                  "expireTime": b.get("expireTime", ""), "cardNo": b.get("cardNo", ""),
+                 "imgUrl": b.get("imgUrl", ""), "orderNo": b.get("orderNo", ""),
+                 "bankName": b.get("bankName", ""),
+                 "activityId": b.get("activityId", ""),
+                 "useDirections": b.get("useDirections", ""),
+                 "profile": guess_profile(b.get("merchant", ""), b.get("title", "")),
                  "code": "", "svg": "", "refreshTime": 0, "expireAt": 0,
                  "fetchCount": 0, "lastFetch": "", "views": 0,
                  "mode": "live", "fetchedAt": "", "err": "", "lastPoll": time.time()}
             SHARES[sid] = s
             share_fill(s)
+            # 配置了云端 → 把会话推到云端写 KV，成功后本地直接发 /union/ 公网链接
+            cloud = (load_settings().get("cloudUrl") or "").strip().rstrip("/")
+            if cloud and not CLOUD:
+                # 凭证一并带过去（云端账号库可能还没有这个账号）
+                acc_push = None
+                if acc:
+                    acc_push = {"id": acc["id"], "token": acc.get("token", ""),
+                                "deviceId": acc.get("deviceId", ""), "name": acc.get("name", "")}
+                if share_promote(s, cloud, load_settings().get("cloudKey", ""), acc_push):
+                    s["cloudPromoted"] = True
             base = share_base(self.headers.get("Host") or "")
             self._send(200, {"ok": True, "share": share_public(s, base)})
             return
