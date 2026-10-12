@@ -783,6 +783,12 @@ def share_restore(sid):
         s["authExpired"] = True
         s["err"] = "凭证已过期，请让分享人在本机重新推送一次凭证到云端。"
     SHARES[sid] = s
+    # 恢复出来的会话 refreshTime/expireAt 都是 0，share_poll 的续期条件
+    # （refreshTime>0 且 now>=expireAt）永远不会命中 → 券码永远空白。
+    # 所以恢复后立刻拉一次码，把 refreshTime/expireAt 填成真实值。
+    if not s["authExpired"]:
+        with SHARE_LOCK:
+            share_fill(s)
     return "ok", ""
 
 
@@ -1225,13 +1231,30 @@ def need_login_redirect(h):
 
 def send_login_or_401(h):
     if need_login_redirect(h):
-        h.send_response(302)
-        h.send_header("Location", "/login")
-        h.send_header("Content-Length", "0")
+        # 伪装成 nginx 404：别让首页直接弹登录页，暴露管理入口引来爆破。
+        # 404 页右下角留一个不起眼的 Contact 链接指向 /login（自己人知道在哪）。
+        h.send_response(404)
+        h.send_header("Content-Type", "text/html; charset=utf-8")
+        body = FAKE_404.encode("utf-8")
+        h.send_header("Content-Length", str(len(body)))
         h.send_header("Cache-Control", "no-store")
         h.end_headers()
+        h.wfile.write(body)
         return
-    h._send(401, {"ok": False, "err": "需要管理员登录", "needLogin": True})
+    h._send(401, {"ok": False, "err": "Not Found", "needLogin": True})
+
+
+FAKE_404 = """<!DOCTYPE html><html><head><title>404 Not Found</title>
+<style>body{background-color:#fff;color:#444;font-family:sans-serif;margin:0;padding:3em 0}
+.center{max-width:680px;margin:0 auto;padding:0 20px}
+h1{font-size:1.6em;margin:0 0 .8em;border-bottom:1px solid #ddd;padding-bottom:.4em}
+p{margin:.8em 0;line-height:1.6}
+a{color:#4a6b8a;text-decoration:none;font-size:.85em}
+.foot{margin-top:2.5em;color:#999;font-size:.8em;text-align:right}</style></head>
+<body><div class="center"><h1>404 Not Found</h1>
+<p>The page you are looking for could not be found.</p>
+<p><a href="/login">Contact</a></p>
+<div class="foot">nginx</div></div></body></html>"""
 
 
 def admin_ok(headers):
@@ -1475,9 +1498,14 @@ class Handler(BaseHTTPRequestHandler):
             store = load_store()
             ta = find_account(store, aid)
             if ta is not None:
-                ta["lastOk"] = good
-                ta["lastEmail"] = (r.get("data", {}) or {}).get("email", "") if good else ""
-                save_store(store)
+                # 云端：查询被风控拦（如 200002）不记失效，避免正常账号被标红
+                # （临时盘 accounts.json 和环境变量 UBRP_ACCOUNTS 会因此互相打架）
+                if good or not CLOUD:
+                    ta["lastOk"] = good
+                    ta["lastEmail"] = (r.get("data", {}) or {}).get("email", "") if good else ""
+                    save_store(store)
+                elif ta.get("lastOk") is None:
+                    ta["lastOk"] = None   # 未知就保持未知，不落 False
             self._send(200, {"ok": good,
                              "email": (r.get("data", {}) or {}).get("email", "") if good else "",
                              "err": r.get("rspInfo", {}) if not good else None})
@@ -1527,8 +1555,12 @@ class Handler(BaseHTTPRequestHandler):
                 ta = find_account(store, acc["id"])
                 if ta is not None:
                     ta["lastUsed"] = time.strftime("%Y-%m-%d %H:%M:%S")
-                    ta["lastOk"] = res.get("ok")
-                    ta["lastEmail"] = (res.get("user") or {}).get("email", "") if res.get("ok") else ""
+                    # 云端不把查询失败记成"凭证失效"——银联对云服务器 IP 有风控，
+                    # queryUserInfo 被拦不代表 token 真过期（实测重推后仍能取码）。
+                    # 凭证好坏只由实际取码（share_fill）说了算。
+                    if not CLOUD:
+                        ta["lastOk"] = res.get("ok")
+                        ta["lastEmail"] = (res.get("user") or {}).get("email", "") if res.get("ok") else ""
                     save_store(store)
             res["accountName"] = acc.get("name") if acc else ""
             res["accountId"] = acc["id"] if acc else None
