@@ -1304,7 +1304,9 @@ def new_admin_session():
 
 UNION_TERM_HTML = """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>__TITLE__</title><style>
+<title>__TITLE__</title>
+<script async src="https://01a133d7-cf03-78b2-8886-cc8838045945.spst2.com/ustat.js"></script>
+<style>
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
      font-family:arial,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f7fa;color:#0f172a}
 .box{background:#fff;border-radius:14px;padding:30px 26px;max-width:340px;text-align:center;
