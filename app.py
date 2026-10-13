@@ -417,8 +417,12 @@ def build_benefit(item, detail, coupon):
     }
 
 
-def fetch_benefits(token, device_id, only_type=2):
-    """拉取权益：type=1 进行中(报名未达标) / type=2 待使用 / type=3 已使用已过期"""
+def fetch_benefits(token, device_id, only_type=0):
+    """拉取权益：type=1 进行中(报名未达标) / type=2 待使用 / type=3 已使用已过期
+
+    默认 0 = 拉全量（1+2+3 合并去重）。已使用的券会从 type=2 消失、
+    只出现在 type=3（orderStatus=5），只拉 type=2 会看不到已使用记录。
+    """
     user = api_post("/user/queryUserInfo", token, device_id, {})
     if not ok(user):
         return {"ok": False, "err": user.get("rspInfo", {}), "list": [], "user": None}
@@ -702,6 +706,14 @@ def share_fill(s):
         s["expireAt"] = now + (r["refreshTime"] or 0)
         s["bornAt"] = now
 
+    # 券已被核销（status=2）→ 停表，前端展示"已被使用"终态
+    # 银联在已使用后仍会返回 dynamicCode，不拦的话 union 页会一直
+    # 显示可用的码（这次抓包实测：status=2 且带码）
+    s["status"] = r.get("status", 1)
+    if s["status"] and s["status"] != 1:
+        s["refreshTime"] = 0
+        s["expireAt"] = 0
+
     s["svg"] = make_qr_svg(s["qrTarget"] or s["code"], scale=8) or ""
     return s
 
@@ -968,6 +980,7 @@ def share_public(s, base=""):
         "mrchUrl": s.get("mrchUrl", ""),
         "expireAt": s.get("expireAt", 0), "now": time.time(),
         "fetchedAt": s.get("fetchedAt", ""), "err": s.get("err", ""),
+        "status": s.get("status", 1),
         "mode": "official" if official else "live",
         "linkStable": s.get("linkStable", False),
         "linkExpire": s.get("linkExpire", ""), "linkNote": s.get("linkNote", ""),
@@ -1549,7 +1562,7 @@ class Handler(BaseHTTPRequestHandler):
             if not token or not dev:
                 self._send(200, {"ok": False, "err": "缺少凭证"})
                 return
-            res = fetch_benefits(token, dev, only_type=b.get("type", 2))
+            res = fetch_benefits(token, dev, only_type=int(b.get("type") or 0))
             if acc is not None:
                 store = load_store()
                 ta = find_account(store, acc["id"])

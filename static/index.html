@@ -534,16 +534,26 @@ function renderTable(){
     }
 
     const ops = [];
-    if(b.code && !dyn) ops.push(`<button class="mini ghost" data-copy="${i}">复制券码</button>`);
-    if(b.mrchUrl) ops.push(`<button class="mini ghost" data-open="${i}">商户页面</button>`);
+    if(b.code && !dyn && b.status === 1) ops.push(`<button class="mini ghost" data-copy="${i}">复制券码</button>`);
+    if(b.mrchUrl && b.status === 1) ops.push(`<button class="mini ghost" data-open="${i}">商户页面</button>`);
 
-    return `<tr>
+    // 已使用/已过期（listType=3 或 status!=1）→ 整行置灰，禁止生成/停止
+    const used = (b.listType === 3) || (b.status && b.status !== 1);
+    const rowStyle = used ? ' style="opacity:.45;filter:grayscale(.8)"' : '';
+    const usedBadge = used ? ` <span class="tag" style="background:#fee2e2;color:#b91c1c">已核销</span>` : '';
+    if(used){
+      if(on) shareHtml = `<div class="small">券已核销，链接已失效</div>
+        <div class="ops" style="margin-top:5px"><button class="mini ghost" data-stop="${i}">停用</button></div>`;
+      else shareHtml = `<span class="small">—</span>`;
+    }
+
+    return `<tr${rowStyle}>
       <td><div class="bt">${b.title||b.activityName||"—"}</div>
           <div class="small">${b.highlight||b.activityName||""}</div></td>
       <td><span class="tag mer">${b.merchant||"—"}</span>
           <div class="small">${b.cardNo||""}${b.bankName?" · "+b.bankName:""}</div></td>
       <td>${b.expireTime||"—"}<div class="small">领券 ${b.receiveTime||"—"}</div></td>
-      <td><span class="tag st">${b.statusText}</span></td>
+      <td><span class="tag st">${b.statusText}</span>${usedBadge}</td>
       <td>${codeHtml}</td>
       <td class="sharecol">${shareHtml}</td>
       <td><div class="ops">${ops.join("")||'<span class="small">—</span>'}</div></td>
