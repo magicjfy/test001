@@ -31,6 +31,15 @@ try:
 except Exception:
     pass
 
+# Render 启动命令是 `python app.py`（不带 -u），stdout 接管道时默认 4KB 块缓冲，
+# 启动横幅几百字节填不满缓冲区 → Render 日志里根本看不到（含 KV 配置那行）。
+# 强制行缓冲，日志即时可见。
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except Exception:
+    pass
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(BASE_DIR, "vendor"))  # 内置 segno
 
@@ -1350,7 +1359,11 @@ class Handler(BaseHTTPRequestHandler):
         # 云端鉴权门：白名单之外一律要管理员会话。
         # 顺序很关键——访客页 /s/ /union/ 和轮询接口 /api/share/ 必须放行，
         # 否则朋友打不开链接。登录页本身也要放行，不然死锁。
-        if not is_public(path) and not admin_ok(self.headers):
+        # 例外：/api/status 放行推送密钥（X-Push-Key），本机「云端体检」走这条路
+        if (not is_public(path) and not admin_ok(self.headers)
+                and not (path == "/api/status"
+                         and PUSH_KEY
+                         and (self.headers.get("X-Push-Key") or "") == PUSH_KEY)):
             send_login_or_401(self)
             return
 
@@ -1388,6 +1401,32 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(200, f.read(), "text/html; charset=utf-8")
             except Exception as e:
                 self._send(500, "login.html 读取失败: %s" % e, "text/plain; charset=utf-8")
+            return
+
+        # 配置体检：一眼看到云端/KV 到底配没配。鉴权二选一：
+        # 管理员登录，或 X-Push-Key == UBRP_PUSH_KEY（本机「云端体检」按钮走后者，
+        # 免得让浏览器跨域直连；密钥不在 URL 里，不进公网日志）
+        if path == "/api/status":
+            if not admin_ok(self.headers):
+                pk = self.headers.get("X-Push-Key") or ""
+                if not (PUSH_KEY and pk == PUSH_KEY):
+                    self._send(401, {"ok": False, "err": "需要管理员登录或推送密钥"})
+                    return
+            st = load_store()
+            self._send(200, {
+                "ok": True,
+                "cloud": CLOUD,
+                "adminSet": bool(ADMIN_PASSWORD),
+                "pushKeySet": bool(PUSH_KEY),
+                "kv": {"enabled": kv_enabled(),
+                       "namespaceSet": bool(os.environ.get("UBRP_KV_NAMESPACE")),
+                       "tokenSet": bool(os.environ.get("UBRP_KV_TOKEN")),
+                       "accountSet": bool(KV_ACCOUNT_ID or os.environ.get("UBRP_KV_ACCOUNT")),
+                       "accountResolved": KV_ACCOUNT_ID or ""},
+                "accounts": len(st.get("accounts") or []),
+                "fromEnv": bool(os.environ.get("UBRP_ACCOUNTS")),
+                "host": HOST,
+            })
             return
 
         # 刷新页面后靠它恢复"监控中"状态和停止按钮
@@ -1658,7 +1697,33 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"ok": False, "err": "%s: %s" % (type(e).__name__, e), "url": url})
             return
 
-        # ---- 云端：接收本地推送的凭证 ----
+        # ---- 本机代查云端体检：云端 /api/status 需管理员登录（我们版不放免密白名单），
+        #      浏览器跨域直连没有那边的登录 cookie，所以由本机服务端代查并转发
+        if path == "/api/cloudstatus":
+            st = load_settings()
+            url = (st.get("cloudUrl") or "").strip().rstrip("/")
+            if not url:
+                self._send(200, {"ok": False, "err": "还没填云端地址"})
+                return
+            try:
+                req = urllib.request.Request(url + "/api/status", method="GET",
+                                             headers={"Accept": "application/json",
+                                                      "X-Push-Key": st.get("cloudKey", "")})
+                with urllib.request.urlopen(req, timeout=25) as r:
+                    res = json.loads(r.read().decode())
+                # 云端旧版本没鉴权（/api/status 在免密白名单里）也照常返回；
+                # 新版本要求管理员登录 → 会返回 401，此时提示用户去云端登录或推送密钥对不上
+                self._send(200, res)
+            except urllib.error.HTTPError as e:
+                if e.code == 401:
+                    self._send(200, {"ok": False,
+                                     "err": "云端拒绝了：推送密钥不对（检查本机「推送密钥」"
+                                            "和云端 UBRP_PUSH_KEY 是否一致）"})
+                else:
+                    self._send(200, {"ok": False, "err": "云端返回 HTTP %d" % e.code})
+            except Exception as e:
+                self._send(200, {"ok": False, "err": "%s: %s" % (type(e).__name__, e)})
+            return
         # 本机把会话推上来，云端写入 KV → 变成持久的 /union/<sid> 链接
         if path == "/api/share/promote":
             if PUSH_KEY and b.get("key") != PUSH_KEY:

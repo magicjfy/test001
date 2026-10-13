@@ -177,6 +177,7 @@
            background:#ecfdf5;border-left:3px solid #0f766e;border-radius:4px"></div>
       <div class="row mt10" style="align-items:center">
         <button class="mini" id="btnPushCloud">推送凭证到云端</button>
+        <button class="mini ghost" id="btnCloudStat">云端体检</button>
         <span class="small" id="pushOut" style="margin-left:8px"></span>
       </div>
       <p class="small">把本机的 token / deviceId 推一份到云端的程序实例，这样云端也能取码，
@@ -784,6 +785,35 @@ $("#btnPushCloud").onclick = async ()=>{
       out.textContent = "✓ 已推送 " + r.count + " 个账号到 " + url.replace(/^https?:\/\//,""); }
     else { out.style.color="#b91c1c"; out.textContent = "✗ 推送失败：" + (r.err||"未知"); }
   }catch(e){ out.style.color="#b91c1c"; out.textContent = "✗ " + e.message; }
+};
+
+/* 云端体检：直接问云端的 /api/status（在云端需管理员登录——所以这里带本会话
+   的 cookie 不行，跨域了；改成让本机服务端代查，顺便把管理 token 也带上） */
+$("#btnCloudStat").onclick = async ()=>{
+  const out = $("#pushOut");
+  out.style.color = ""; out.textContent = "查询中…";
+  const url = $("#cloudUrl").value.trim();
+  if(!url){ out.style.color="#b91c1c"; out.textContent = "先填云端地址"; return; }
+  try{
+    await api("/api/settings",{method:"POST",body:JSON.stringify({cloudUrl:url})});
+    const r = await api("/api/cloudstatus",{method:"POST",body:JSON.stringify({})});
+    if(r && r.err){ out.style.color="#b91c1c"; out.textContent = r.err; return; }
+    if(!r || !r.ok){ out.style.color="#b91c1c";
+      out.textContent = "云端没响应（可能正在冷启动，等 30 秒再试）"; return; }
+    const k = r.kv || {};
+    const line = (ok, txt) => (ok ? "✓ " : "✗ ") + txt;
+    out.style.color = k.enabled ? "#0f766e" : "#b45309";
+    out.innerHTML = [
+      line(r.cloud, "云端模式"),
+      line(r.adminSet, "管理员密码"),
+      line(r.pushKeySet, "推送密钥"),
+      line(k.namespaceSet, "KV 命名空间"),
+      line(k.tokenSet, "KV Token"),
+      line(k.accountSet || k.accountResolved, "KV Account" + (k.accountResolved ? "（已反查）" : "")),
+      line(k.enabled, "KV 已启用"),
+      "· 云端账号 " + r.accounts + " 个" + (r.fromEnv ? "（含环境变量种子）" : "")
+    ].join("<br>");
+  }catch(e){ out.style.color="#b91c1c"; out.textContent = "查询失败：" + e.message; }
 };
 
 $("#btnHostTest").onclick = async ()=>{
