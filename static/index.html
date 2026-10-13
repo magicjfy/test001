@@ -794,9 +794,10 @@ $("#btnCloudStat").onclick = async ()=>{
   const out = $("#pushOut");
   out.style.color = ""; out.textContent = "查询中…";
   const url = $("#cloudUrl").value.trim();
+  const key = $("#cloudKey").value.trim();
   if(!url){ out.style.color="#b91c1c"; out.textContent = "先填云端地址"; return; }
   try{
-    await api("/api/settings",{method:"POST",body:JSON.stringify({cloudUrl:url})});
+    await api("/api/settings",{method:"POST",body:JSON.stringify({cloudUrl:url, cloudKey:key})});
     const r = await api("/api/cloudstatus",{method:"POST",body:JSON.stringify({})});
     if(r && r.err){ out.style.color="#b91c1c"; out.textContent = r.err; return; }
     if(!r || !r.ok){ out.style.color="#b91c1c";

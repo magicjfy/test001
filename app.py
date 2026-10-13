@@ -1708,9 +1708,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"ok": False, "err": "还没填云端地址"})
                 return
             try:
+                key = st.get("cloudKey", "")
                 req = urllib.request.Request(url + "/api/status", method="GET",
                                              headers={"Accept": "application/json",
-                                                      "X-Push-Key": st.get("cloudKey", "")})
+                                                      "X-Push-Key": key})
                 with urllib.request.urlopen(req, timeout=25) as r:
                     res = json.loads(r.read().decode())
                 # 云端旧版本没鉴权（/api/status 在免密白名单里）也照常返回；
@@ -1718,9 +1719,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, res)
             except urllib.error.HTTPError as e:
                 if e.code == 401:
-                    self._send(200, {"ok": False,
-                                     "err": "云端拒绝了：推送密钥不对（检查本机「推送密钥」"
-                                            "和云端 UBRP_PUSH_KEY 是否一致）"})
+                    if not key:
+                        self._send(200, {"ok": False,
+                                         "err": "本机还没存推送密钥——在「推送密钥」输入框填上"
+                                                "和云端 UBRP_PUSH_KEY 一致的那串再点体检"})
+                    else:
+                        self._send(200, {"ok": False,
+                                         "err": "云端拒绝了：推送密钥不匹配（检查本机「推送密钥」"
+                                                "和云端 UBRP_PUSH_KEY 是否一致）"})
                 else:
                     self._send(200, {"ok": False, "err": "云端返回 HTTP %d" % e.code})
             except Exception as e:
@@ -1811,18 +1817,28 @@ class Handler(BaseHTTPRequestHandler):
         # ---- 链接生成方式 ----
         if path == "/api/settings":
             s = load_settings()
-            if any(k in b for k in ("qrMode", "hostedBase", "qrApi", "cloudUrl",
-                                    "cloudKey", "officialForm", "shareTtl")):
+            # 部分更新语义：只覆盖这次请求里带了值的字段。
+            # 之前"没发就置空"——体检按钮只发 cloudUrl，把存好的 cloudKey
+            # 抹成空串，云端代查带空密钥 401，看起来像"密钥不对"。
+            if "qrMode" in b:
                 s["qrMode"] = b.get("qrMode", s["qrMode"])
+            if "hostedBase" in b:
                 s["hostedBase"] = (b.get("hostedBase") or "").strip()
+            if "qrApi" in b:
                 s["qrApi"] = b.get("qrApi", s["qrApi"])
+            if "cloudUrl" in b:
                 s["cloudUrl"] = (b.get("cloudUrl") or "").strip().rstrip("/")
+            if "cloudKey" in b:
                 s["cloudKey"] = (b.get("cloudKey") or "").strip()
+            if "officialForm" in b:
                 s["officialForm"] = b.get("officialForm", s["officialForm"])
+            if "shareTtl" in b:
                 try:
                     s["shareTtl"] = int(b.get("shareTtl", s["shareTtl"]))
                 except Exception:
                     pass
+            if any(k in b for k in ("qrMode", "hostedBase", "qrApi", "cloudUrl",
+                                    "cloudKey", "officialForm", "shareTtl")):
                 save_settings(s)
             self._send(200, {"ok": True, "settings": s, "lanIp": lan_ip(),
                              "host": HOST, "qrApis": QR_APIS,
